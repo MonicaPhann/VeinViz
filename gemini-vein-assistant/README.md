@@ -6,7 +6,7 @@ Each question also sends Gemini the current frame from the infrared vein camera.
 
 ## Requirements
 
-- Python 3.11 or newer (check with `python3 --version`). Tested on Python 3.14 on an Apple Silicon Mac.
+- Python 3.11 or newer (check with `python3 --version`, or `py --version` on Windows). Tested on Python 3.14 on an Apple Silicon Mac.
 - A Gemini API key from https://aistudio.google.com/apikey
 - Optional: the VeinViz infrared camera stream on the same network (default `http://192.168.1.143:8000/stream`).
   Without it, the assistant still works and tells you the camera frame is unavailable.
@@ -18,17 +18,19 @@ Each question also sends Gemini the current frame from the infrared vein camera.
    cd gemini-vein-assistant
    cp .env.example .env
    ```
+   On Windows: `copy .env.example .env`
 2. Open `.env` and paste your key after `GEMINI_API_KEY=`. Never commit `.env`; it's in `.gitignore`.
 3. Start the server:
    ```
    ./run.sh
    ```
+   On Windows, double-click `run.bat` or run `.\run.bat`.
    The first run takes a few minutes. It creates a `.venv` folder, installs the Python packages, and
    downloads the speech model (about 500 MB, one time only).
 4. When the terminal shows `Uvicorn running on http://0.0.0.0:8080`, open **http://localhost:8080**,
    tap the mic and allow microphone access.
 
-To stop it, press Ctrl+C in the terminal. After changing any code, stop it and run `./run.sh` again.
+To stop it, press Ctrl+C in the terminal. After changing any code, stop it and run `./run.sh` (or `run.bat`) again.
 
 ## Using it
 

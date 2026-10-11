@@ -5,6 +5,7 @@ Under IR, veins show up as dark lines; flattening + CLAHE makes them easy to see
 
 Run:
   python server.py --source rtsp://USER:PASS@CAMERA_IP:554/stream1
+  or put CAMERA_SOURCE=rtsp://... in a .env file next to this script (kept out of git) and run: python server.py
   (also works with a webcam index "0", a recorded clip "clip.mp4" or a photo "arm.jpg")
 Open:  http://localhost:8000   (or http://<laptop-ip>:8000 from another device on the same network)
 """
@@ -15,12 +16,25 @@ import threading
 import time
 
 os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+os.environ.setdefault("FLASK_SKIP_DOTENV", "1")                    # we read .env ourselves
 import cv2
 import numpy as np
 from flask import Flask, Response, send_from_directory
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 IMAGE_EXT = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff")
+
+
+def load_env(path):
+    """Read KEY=VALUE lines from a local .env file (kept out of git) into the environment."""
+    if not os.path.isfile(path):
+        return
+    with open(path, encoding="utf-8-sig") as fh:
+        for line in fh:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
 # ---------------------------------------------------------------- camera input
@@ -159,8 +173,10 @@ def create_app(proc):
 
 
 if __name__ == "__main__":
+    load_env(os.path.join(HERE, ".env"))
     ap = argparse.ArgumentParser()
-    ap.add_argument("--source", required=True, help="rtsp://..., webcam index, video file or photo")
+    ap.add_argument("--source", default=os.environ.get("CAMERA_SOURCE"), required=not os.environ.get("CAMERA_SOURCE"),
+                    help="rtsp://..., webcam index, video file or photo (default: CAMERA_SOURCE from .env)")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--width", type=int, default=1280, help="output width (lower = faster)")
     ap.add_argument("--contrast", type=float, default=3.0, help="CLAHE clip limit (higher = more contrast)")

@@ -13,10 +13,9 @@ Hands-free tools for vein procedures, built around a near-infrared vein camera.
 Each folder's README has the full steps.
 
 ```
-# terminal 1: the camera stream (use your Tapo camera account; never commit this URL, it contains the password)
+# terminal 1: the camera stream (first run creates vein-camera-stream/.env: put your camera address in it)
 cd vein-camera-stream
-pip install -r requirements.txt
-python server.py --source rtsp://USER:PASS@CAMERA_IP:554/stream1
+./run.sh
 
 # terminal 2: the assistant (needs a Gemini API key in gemini-vein-assistant/.env)
 cd gemini-vein-assistant
@@ -27,6 +26,10 @@ cp .env.example .env
 cd vein-arm-guide
 ./serve.sh
 ```
+
+On Windows, use `run.bat` / `serve.bat` instead of `./run.sh` / `./serve.sh`
+(double-click them, or run `.\run.bat` in PowerShell). Install Python 3.11+ from python.org first and tick
+"Add python.exe to PATH".
 
 Then open http://localhost:8000 (camera), http://localhost:8080 (assistant) and http://localhost:8081 (arm page).
 Vein Assist reads the camera from `CAMERA_STREAM_URL` (`http://<laptop-ip>:8000/stream`).
