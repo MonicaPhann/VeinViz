@@ -6,25 +6,33 @@ in passthrough.
 
 ## Start it
 
-You need Python 3 (it's only used to serve the page) and the Vein Assist chatbot from
-`../gemini-vein-assistant`, which supplies the recommendations.
+You need Python 3 (it only serves the page) and the Vein Assist assistant from
+`../gemini-vein-assistant`, which supplies the recommendations. Start Vein Assist first; see its README.
 
-1. Start Vein Assist first (see `../gemini-vein-assistant/README.md`):
-   ```
-   cd gemini-vein-assistant
-   ./run.sh
-   ```
-2. In a second terminal, start this page:
+### Windows
+
+1. Start Vein Assist: double-click `gemini-vein-assistant\run.bat`.
+2. Double-click **`vein-arm-guide\serve.bat`**. If Windows Firewall asks about Python, click **Allow**
+   (private networks) so the Quest can reach it.
+3. Open **http://localhost:8081**.
+
+### macOS / Linux
+
+1. Start Vein Assist in one terminal: `cd gemini-vein-assistant && ./run.sh`
+2. In a second terminal:
    ```
    cd vein-arm-guide
    ./serve.sh
    ```
-   On Windows, run `run.bat` for Vein Assist and `serve.bat` here instead (double-click, or `.\serve.bat`).
-3. Open **http://localhost:8081**. On the Quest, open `http://<this-computer's-IP>:8081` in the
-   Quest browser. It needs no microphone, so plain http over your Wi-Fi works.
-   (Find the IP on a Mac with `ipconfig getifaddr en0`; on Windows run `ipconfig` and use the IPv4 Address.)
+3. Open **http://localhost:8081**.
 
-To stop it, press Ctrl+C. The page shows "Waiting for Vein Assist…" until the chatbot server is running.
+### On the Quest
+
+Open `http://<this-computer's-IP>:8081` in the Quest browser. It needs no microphone, so plain http
+over your Wi-Fi works. To find the IP, run `ipconfig getifaddr en0` on a Mac, or `ipconfig` on
+Windows and look for the "IPv4 Address".
+
+To stop it, press Ctrl+C. The page shows "Waiting for Vein Assist…" until the assistant is running.
 
 ## Use
 
