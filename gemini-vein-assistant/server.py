@@ -723,7 +723,7 @@ if __name__ == "__main__":
         print(f"Other devices on this network: http://{ip}:{port}  (view the chat; the mic works on this computer)")
     if cert:
         host = ip or "localhost"
-        print(f"One link for everything (mic on any device; on the Quest, View in AR shows the chat, mic and arm):")
+        print(f"One link for everything (mic on any device; on the Quest, View in AR shows the live camera, chat, mic and arm):")
         print(f"  https://{host}:{https_port}   (first visit on each device: tap Advanced -> Proceed)")
         if (ARM_DIR / "index.html").exists():
             print(f"  Arm only: https://{host}:{https_port}/arm/")

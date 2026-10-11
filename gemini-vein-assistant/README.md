@@ -85,7 +85,7 @@ runs an https address, using a certificate it makes for itself (saved in `certs/
 It prints the links when it starts:
 
 ```
-One link for everything (mic on any device; on the Quest, View in AR shows the chat, mic and arm):
+One link for everything (mic on any device; on the Quest, View in AR shows the live camera, chat, mic and arm):
   https://192.168.1.143:8443   (first visit on each device: tap Advanced -> Proceed)
   Arm only: https://192.168.1.143:8443/arm/
 ```
