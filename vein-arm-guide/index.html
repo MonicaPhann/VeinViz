@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vein Arm Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;600&family=Hind:wght@500;600&display=swap" rel="stylesheet" />
+  <script>
+    // Apply a saved light/dark choice before the page paints, so it doesn't flash.
+    try { const t = localStorage.getItem("arm-theme"); if (t === "light" || t === "dark" || t === "aero") document.documentElement.dataset.theme = t; } catch (_) {}
+  </script>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --skin: #f1f3f6;
+      --outline: #c3cad4;
+      --vein: #8fb0dc;
+      --crease: #d5dbe3;
+      --glow: #0891b2;
+      --text: #0f172a;
+      --muted: #526071;
+      --btn-border: #d5dbe3;
+      --font: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]):not([data-theme="aero"]) {
+        --bg: #000000; --skin: #15191f; --outline: #3a4350; --vein: #3d6aa8; --crease: #2a3038;
+        --glow: #22d3ee; --text: #e8edf2; --muted: #9aa6b2; --btn-border: #2a3038;
+        color-scheme: dark;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #000000; --skin: #15191f; --outline: #3a4350; --vein: #3d6aa8; --crease: #2a3038;
+      --glow: #22d3ee; --text: #e8edf2; --muted: #9aa6b2; --btn-border: #2a3038;
+      color-scheme: dark;
+    }
+
+    /* Frutiger Aero: sky-to-grass backdrop, bubbles, a glassy arm and a glossy green glow */
+    :root[data-theme="aero"] {
+      --bg: #e4f5ff; --skin: url(#aero-skin); --outline: rgba(255, 255, 255, 0.95); --vein: #3b82c4;
+      --crease: rgba(59, 130, 196, 0.35); --glow: #059669; --text: #0b3550; --muted: #2d5873;
+      --btn-border: rgba(255, 255, 255, 0.95);
+      --font: "Segoe UI", "Hind", "Figtree", system-ui, sans-serif;
+      color-scheme: light;
+    }
+    :root[data-theme="aero"] body {
+      background:
+        radial-gradient(circle at 14% 20%, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0) 8%),
+        radial-gradient(circle at 84% 16%, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0) 6%),
+        radial-gradient(circle at 80% 58%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 10%),
+        radial-gradient(circle at 20% 66%, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 7%),
+        radial-gradient(130% 45% at 50% 112%, #6fcf5f 0%, #a5e48f 38%, rgba(165, 228, 143, 0) 62%),
+        linear-gradient(180deg, #3fa9e8 0%, #8fd2f6 40%, #dff4ff 72%, #e9f9e1 100%);
+      background-attachment: fixed;
+    }
+    :root[data-theme="aero"] .arm { filter: drop-shadow(0 10px 22px rgba(14, 80, 130, 0.28)); }
+    :root[data-theme="aero"] .outline > * { stroke-width: 4; }
+    :root[data-theme="aero"] .zone .area { fill: #34d399; fill-opacity: .45; stroke: #047857; }
+    :root[data-theme="aero"] .caption {
+      padding: 10px 20px; border-radius: 16px; min-height: 0;
+      background: rgba(255, 255, 255, 0.55); border: 1px solid rgba(255, 255, 255, 0.9);
+      -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      box-shadow: 0 6px 20px rgba(14, 80, 130, 0.16), inset 0 1px 0 #fff;
+    }
+    :root[data-theme="aero"] .eyebrow { color: #047857; }
+    :root[data-theme="aero"] .theme-btn {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.6) 50%, rgba(214, 240, 255, 0.75) 51%, rgba(255, 255, 255, 0.85) 100%);
+      box-shadow: 0 2px 8px rgba(14, 80, 130, 0.2);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg); color: var(--text); font-family: var(--font);
+      min-height: 100dvh; display: grid; place-items: center;
+      transition: background-color 200ms;
+    }
+
+    main { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 24px 16px; }
+    .arm { height: min(74dvh, 560px); width: auto; display: block; overflow: visible; }
+
+    /* arm drawing */
+    .outline > * { fill: none; stroke: var(--outline); stroke-width: 5; stroke-linejoin: round; }
+    .fill > * { fill: var(--skin); }
+    .vein { fill: none; stroke: var(--vein); stroke-width: 3; stroke-linecap: round; }
+    .vein.thin { stroke-width: 2; opacity: .7; }
+    .crease { fill: none; stroke: var(--crease); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 3 5; }
+
+    /* highlight zones: hidden until their site is recommended */
+    .zone { opacity: 0; transition: opacity 220ms ease-in; }
+    .zone.on { opacity: 1; transition: opacity 320ms cubic-bezier(.22, 1, .36, 1); }
+    .zone .area { fill: var(--glow); fill-opacity: .26; stroke: var(--glow); stroke-width: 2.5; }
+    .zone .seg { fill: none; stroke: var(--glow); stroke-width: 5; stroke-linecap: round; }
+    .zone .ring { fill: none; stroke: var(--glow); stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; }
+    .zone.on .ring { animation: ping 1.3s cubic-bezier(.22, 1, .36, 1) 3; } /* a few pulses on arrival, then steady */
+    @keyframes ping { from { transform: scale(1); opacity: .8; } to { transform: scale(1.7); opacity: 0; } }
+
+    /* caption */
+    .caption { text-align: center; min-height: 84px; max-width: 340px; }
+    .eyebrow { margin: 0 0 2px; font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--glow); }
+    .site { margin: 0; font-size: 22px; font-weight: 600; line-height: 1.3; }
+    .where { margin: 2px 0 0; font-size: 16px; font-weight: 500; color: var(--muted); }
+    .hint { margin: 0; font-size: 16px; font-weight: 500; color: var(--muted); line-height: 1.5; }
+
+    /* light / dark button (same as the chatbot) */
+    .theme-btn {
+      position: fixed; top: 16px; right: 16px;
+      width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; cursor: pointer;
+      border: 1px solid var(--btn-border); background: var(--bg); color: var(--text);
+      transition: border-color 160ms;
+    }
+    .theme-btn:hover { border-color: var(--muted); }
+    .theme-btn:focus-visible { outline: 3px solid var(--glow); outline-offset: 2px; }
+    .theme-btn svg { width: 20px; height: 20px; grid-area: 1 / 1; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    /* the icon shows the theme you'll switch to next: light -> dark -> aero */
+    .theme-btn svg { display: none; }
+    :root[data-mode="light"] .theme-btn .moon,
+    :root[data-mode="dark"] .theme-btn .drop,
+    :root[data-mode="aero"] .theme-btn .sun { display: block; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .zone, .zone.on { transition: none; }
+      .zone.on .ring { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <button class="theme-btn" id="theme" type="button" aria-label="Switch to light mode">
+    <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
+    <svg class="drop" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
+  </button>
+
+  <main>
+    <!-- Right arm, palm up (thumb side on the left of the picture). -->
+    <svg class="arm" viewBox="0 0 240 630" role="img" aria-labelledby="caption-text">
+      <defs>
+        <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#fff" stop-opacity="0" />
+          <stop offset=".13" stop-color="#fff" stop-opacity="1" />
+        </linearGradient>
+        <mask id="fade-top" maskUnits="userSpaceOnUse" x="0" y="0" width="240" height="630">
+          <rect width="240" height="630" fill="url(#fade)" />
+        </mask>
+        <linearGradient id="aero-skin" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#ffffff" stop-opacity=".55" />
+          <stop offset=".3" stop-color="#ffffff" stop-opacity=".95" />
+          <stop offset=".55" stop-color="#e6f6ff" stop-opacity=".7" />
+          <stop offset="1" stop-color="#bfe6fb" stop-opacity=".75" />
+        </linearGradient>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="5" result="b" />
+          <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+        <g id="silhouette">
+          <path d="M66 0 C64 80 70 180 80 250 C76 280 72 310 78 350 C86 410 96 450 98 478 L142 478 C144 450 152 410 162 350 C168 310 166 280 160 250 C170 180 176 80 174 0 Z" />
+          <path d="M99 470 C92 488 90 512 92 556 L150 556 C153 520 151 492 141 470 Z" />
+          <path d="M97 492 C84 500 72 514 67 532 C64 544 72 550 80 543 C88 535 94 526 100 518 Z" />
+          <rect x="92" y="540" width="13.5" height="62" rx="6.75" />
+          <rect x="107" y="540" width="13.5" height="70" rx="6.75" />
+          <rect x="122" y="540" width="13.5" height="66" rx="6.75" />
+          <rect x="137" y="540" width="13" height="52" rx="6.5" />
+        </g>
+      </defs>
+
+      <g mask="url(#fade-top)">
+        <g class="outline"><use href="#silhouette" /></g>
+        <g class="fill"><use href="#silhouette" /></g>
+
+        <path class="crease" d="M86 262 Q121 272 156 258" />
+        <!-- cephalic (thumb side), basilic (little-finger side), median cubital, median forearm -->
+        <path class="vein" d="M104 470 C96 420 84 380 86 330 C88 300 92 280 92 255 C90 200 82 130 80 30" />
+        <path class="vein" d="M138 470 C146 420 156 380 154 330 C152 300 150 280 150 250 C152 220 156 190 158 150" />
+        <path class="vein" d="M91 284 C108 273 128 259 150 245" />
+        <path class="vein thin" d="M120 468 C118 420 122 360 118 305 C116 292 112 285 108 276" />
+
+        <g class="zone" data-site="median_cubital">
+          <g transform="rotate(-32 121 264)">
+            <ellipse class="ring" cx="121" cy="264" rx="26" ry="14" />
+            <ellipse class="area" cx="121" cy="264" rx="26" ry="14" />
+          </g>
+          <path class="seg" filter="url(#glow)" d="M91 284 C108 273 128 259 150 245" />
+        </g>
+        <g class="zone" data-site="cephalic_antecubital">
+          <ellipse class="ring" cx="91" cy="268" rx="12" ry="22" />
+          <ellipse class="area" cx="91" cy="268" rx="12" ry="22" />
+          <path class="seg" filter="url(#glow)" d="M89 300 C91 285 92 270 92 240" />
+        </g>
+        <g class="zone" data-site="basilic_antecubital">
+          <ellipse class="ring" cx="150" cy="254" rx="12" ry="22" />
+          <ellipse class="area" cx="150" cy="254" rx="12" ry="22" />
+          <path class="seg" filter="url(#glow)" d="M152 288 C151 272 150 256 150 228" />
+        </g>
+        <g class="zone" data-site="cephalic_forearm">
+          <ellipse class="ring" cx="90" cy="395" rx="13" ry="44" />
+          <ellipse class="area" cx="90" cy="395" rx="13" ry="44" />
+          <path class="seg" filter="url(#glow)" d="M99 440 C92 412 86 382 86 352" />
+        </g>
+        <g class="zone" data-site="basilic_forearm">
+          <ellipse class="ring" cx="151" cy="395" rx="13" ry="44" />
+          <ellipse class="area" cx="151" cy="395" rx="13" ry="44" />
+          <path class="seg" filter="url(#glow)" d="M143 440 C150 412 155 382 154 352" />
+        </g>
+        <g class="zone" data-site="dorsal_hand">
+          <ellipse class="ring" cx="121" cy="516" rx="28" ry="30" />
+          <ellipse class="area" cx="121" cy="516" rx="28" ry="30" />
+        </g>
+      </g>
+    </svg>
+
+    <div class="caption" id="caption" aria-live="polite">
+      <p class="hint" id="caption-text">Say “Gemini, recommended region”</p>
+    </div>
+  </main>
+
+  <script>
+  (() => {
+    "use strict";
+    const SITES = {
+      median_cubital: ["Median cubital vein", "Elbow crease"],
+      cephalic_antecubital: ["Cephalic vein", "Elbow, thumb side"],
+      basilic_antecubital: ["Basilic vein", "Elbow, little-finger side"],
+      cephalic_forearm: ["Cephalic vein", "Forearm, thumb side"],
+      basilic_forearm: ["Basilic vein", "Forearm, little-finger side"],
+      dorsal_hand: ["Dorsal hand veins", "Back of the hand"],
+    };
+    const caption = document.getElementById("caption");
+
+    function show(site) {
+      document.querySelectorAll(".zone").forEach((z) => z.classList.toggle("on", z.dataset.site === site));
+      if (site && SITES[site]) {
+        caption.innerHTML = '<p class="eyebrow">Recommended region</p><p class="site" id="caption-text"></p><p class="where"></p>';
+        caption.querySelector(".site").textContent = SITES[site][0];
+        caption.querySelector(".where").textContent = SITES[site][1];
+      } else {
+        hint("Say “Gemini, recommended region”");
+      }
+    }
+
+    function hint(text) {
+      caption.innerHTML = '<p class="hint" id="caption-text"></p>';
+      caption.querySelector(".hint").textContent = text;
+    }
+
+    // Listen to the Vein Assist chatbot server (same computer, port 8080 unless ?server=host:port).
+    const params = new URLSearchParams(location.search);
+    const server = params.get("server") || `${location.hostname || "localhost"}:8080`;
+    let current = null;
+
+    function connect() {
+      const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${server}/ws`);
+      ws.onmessage = (e) => {
+        const ev = JSON.parse(e.data);
+        if (ev.type === "snapshot" || ev.type === "region") {
+          current = ev.region ? ev.region.site : null;
+          show(current);
+        }
+      };
+      ws.onopen = () => show(current);
+      ws.onclose = () => {
+        hint("Waiting for Vein Assist…");
+        setTimeout(connect, 2000);
+      };
+    }
+
+    if (params.get("site")) show(params.get("site")); // preview without the server, e.g. ?site=median_cubital
+    else connect();
+
+    // Theme: light -> dark -> aero
+    const root = document.documentElement, btn = document.getElementById("theme");
+    const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+    const NEXT = { light: "dark", dark: "aero", aero: "light" };
+    const NAMES = { light: "light mode", dark: "dark mode", aero: "Aero theme" };
+    const mode = () => root.dataset.theme || (systemDark.matches ? "dark" : "light");
+    function syncTheme() {
+      root.dataset.mode = mode();
+      const label = `Switch to ${NAMES[NEXT[mode()]]}`;
+      btn.setAttribute("aria-label", label);
+      btn.title = label;
+    }
+    btn.addEventListener("click", () => {
+      root.dataset.theme = NEXT[mode()];
+      try { localStorage.setItem("arm-theme", root.dataset.theme); } catch (_) {}
+      syncTheme();
+    });
+    systemDark.addEventListener("change", syncTheme);
+    syncTheme();
+  })();
+  </script>
+</body>
+</html>
