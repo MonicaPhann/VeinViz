@@ -37,6 +37,11 @@ WHISPER_MODEL = os.getenv("WHISPER_MODEL", "auto").strip() or "auto"
 WHISPER_THREADS = min(os.cpu_count() or 4, 8)
 CAMERA_URL = os.getenv("CAMERA_STREAM_URL", "http://192.168.1.143:8000/stream").strip()
 HISTORY_TURNS = int(os.getenv("HISTORY_TURNS", "20"))
+# HTTPS lets other devices use the mic and the Quest use AR. Set HTTPS_PORT=off to disable.
+HTTPS_PORT = os.getenv("HTTPS_PORT", "8443").strip().lower()
+CERT_DIR = BASE_DIR / "certs"
+# The arm page is also served at /arm/ so the Quest can open it over the same HTTPS link.
+ARM_DIR = Path(os.getenv("ARM_PAGE_DIR", str(BASE_DIR.parent / "vein-arm-guide"))).expanduser()
 
 SYSTEM_PROMPT = """You are a hands-free clinical assistant supporting nurses and doctors \
 during procedures on a patient's veins: venipuncture and blood draws, peripheral IV \
@@ -103,6 +108,10 @@ async def lifespan(_app: FastAPI):
 client = genai.Client(api_key=API_KEY) if API_KEY else None
 app = FastAPI(title="Gemini Vein Assist", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+
+
+if (ARM_DIR / "index.html").exists():
+    app.mount("/arm", StaticFiles(directory=ARM_DIR, html=True), name="arm")
 
 
 @app.middleware("http")
@@ -461,14 +470,92 @@ def network_ip() -> str | None:
         return None
 
 
-if __name__ == "__main__":
+def ensure_certificate(ip: str | None) -> tuple[Path, Path]:
+    """A self-signed certificate for this computer, made once and remade when its IP changes."""
+    import datetime
+    import ipaddress
+    import socket
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+
+    cert_path, key_path = CERT_DIR / "cert.pem", CERT_DIR / "key.pem"
+    ips = {"127.0.0.1"} | ({ip} if ip else set())
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if cert_path.exists() and key_path.exists():
+        try:
+            cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
+            san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+            covered = {str(a) for a in san.get_values_for_type(x509.IPAddress)}
+            if ips <= covered and cert.not_valid_after_utc > now + datetime.timedelta(days=30):
+                return cert_path, key_path
+        except Exception:
+            pass  # unreadable or old: make a new one
+
+    host = socket.gethostname()
+    names = {"localhost", host, host.split(".")[0] + ".local"}
+    key = ec.generate_private_key(ec.SECP256R1())
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Vein Assist (this computer)")])
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(minutes=5))
+        .not_valid_after(now + datetime.timedelta(days=825))
+        .add_extension(x509.SubjectAlternativeName(
+            [x509.DNSName(n) for n in sorted(names)] + [x509.IPAddress(ipaddress.ip_address(i)) for i in sorted(ips)]
+        ), critical=False)
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .sign(key, hashes.SHA256())
+    )
+    CERT_DIR.mkdir(exist_ok=True)
+    key_path.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                           serialization.NoEncryption()))
+    cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    print(f"[https] made a new certificate for {', '.join(sorted(ips))}")
+    return cert_path, key_path
+
+
+async def serve(port: int, https_port: int | None, cert: tuple[Path, Path] | None) -> None:
     import uvicorn
 
+    servers = [uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=port))]
+    if https_port and cert:
+        servers.append(uvicorn.Server(uvicorn.Config(
+            app, host="0.0.0.0", port=https_port, ssl_certfile=str(cert[0]), ssl_keyfile=str(cert[1]),
+            lifespan="off",  # the http server already runs startup (loading Whisper)
+        )))
+    tasks = [asyncio.create_task(s.serve()) for s in servers]
+    await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    for s in servers:  # Ctrl+C (or one failing) stops both
+        s.should_exit = True
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+if __name__ == "__main__":
     if not API_KEY:
         print("WARNING: GEMINI_API_KEY is not set in .env — answers will fail until it is.")
     port = int(os.getenv("PORT", "8080"))
+    https_port = None if HTTPS_PORT in ("", "0", "off", "no", "false") else int(HTTPS_PORT)
+    ip = network_ip()
+    cert = None
+    if https_port:
+        try:
+            cert = ensure_certificate(ip)
+        except Exception as exc:
+            print(f"[https] couldn't set up HTTPS ({exc!r}); running http only")
     print(f"Model: {MODEL}\nSpeech: local Whisper ({WHISPER_MODEL})\nCamera: {CAMERA_URL or '(disabled)'}")
     print(f"Open http://localhost:{port} in your browser.")
-    if ip := network_ip():
+    if ip:
         print(f"Other devices on this network: http://{ip}:{port}  (view the chat; the mic works on this computer)")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    if cert:
+        host = ip or "localhost"
+        print(f"One link for everything (mic on any device; on the Quest, View in AR shows the chat, mic and arm):")
+        print(f"  https://{host}:{https_port}   (first visit on each device: tap Advanced -> Proceed)")
+        if (ARM_DIR / "index.html").exists():
+            print(f"  Arm only: https://{host}:{https_port}/arm/")
+    asyncio.run(serve(port, https_port, cert))

@@ -9,3 +9,6 @@ __pycache__/
 *.task
 captures/
 *.mp4
+
+# self-signed HTTPS certificate and private key (made on each computer)
+certs/
