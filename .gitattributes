@@ -1,0 +1,3 @@
+# Windows scripts need CRLF line endings, shell scripts need LF, on every OS
+*.bat text eol=crlf
+*.sh text eol=lf

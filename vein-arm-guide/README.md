@@ -19,9 +19,10 @@ You need Python 3 (it's only used to serve the page) and the Vein Assist chatbot
    cd vein-arm-guide
    ./serve.sh
    ```
+   On Windows, run `run.bat` for Vein Assist and `serve.bat` here instead (double-click, or `.\serve.bat`).
 3. Open **http://localhost:8081**. On the Quest, open `http://<this-computer's-IP>:8081` in the
    Quest browser. It needs no microphone, so plain http over your Wi-Fi works.
-   (Find the IP on a Mac with `ipconfig getifaddr en0`.)
+   (Find the IP on a Mac with `ipconfig getifaddr en0`; on Windows run `ipconfig` and use the IPv4 Address.)
 
 To stop it, press Ctrl+C. The page shows "Waiting for Vein Assist…" until the chatbot server is running.
 
