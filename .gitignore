@@ -1,0 +1,6 @@
+# secrets and local-only files
+.env
+.venv/
+__pycache__/
+.claude/
+.DS_Store
