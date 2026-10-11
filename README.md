@@ -26,3 +26,24 @@ your Gemini API key in `gemini-vein-assistant/.env`. On Windows, the assistant o
 
 Then open http://localhost:8000 (camera), http://localhost:8080 (assistant) and http://localhost:8081 (arm page).
 Vein Assist reads the camera from `CAMERA_STREAM_URL` in its `.env` (`http://<laptop-ip>:8000/stream`).
+
+## Open it from other devices (same Wi-Fi)
+
+All three apps also work over plain http from any device on the same network, including the Quest browser.
+Use the computer's IP address instead of `localhost`. Each app prints its link when it starts, for example:
+
+```
+Other devices on this network: http://192.168.1.143:8080
+```
+
+| App | Link |
+|---|---|
+| Camera stream | `http://<computer-ip>:8000` |
+| Vein Assist | `http://<computer-ip>:8080` |
+| Arm page | `http://<computer-ip>:8081` |
+
+Find the IP with `ipconfig getifaddr en0` (Mac) or `ipconfig` and the "IPv4 Address" (Windows). On Windows, click
+**Allow** when the firewall asks about Python. Tip: reserve the computer's IP in your router so the links don't change.
+
+Browsers only allow the microphone on `localhost` or https. Over these http links, other devices can follow the
+chat and the arm page live, but questions are asked on the computer running Vein Assist.

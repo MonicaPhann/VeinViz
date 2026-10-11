@@ -68,6 +68,7 @@ The button in the top-right corner cycles the theme: light, dark and Frutiger Ae
 ## Second screen
 
 Any device on the same network can open `http://<this-computer's-IP>:8080` to follow the chat live.
+The server prints this link when it starts (`Other devices on this network: http://…:8080`).
 Browsers only allow the mic on `localhost` or HTTPS, so those other screens are view-only.
 
 ## Config (`.env`)

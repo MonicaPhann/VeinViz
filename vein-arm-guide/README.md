@@ -28,7 +28,7 @@ You need Python 3 (it only serves the page) and the Vein Assist assistant from
 
 ### On the Quest
 
-Open `http://<this-computer's-IP>:8081` in the Quest browser. It needs no microphone, so plain http
+Open `http://<this-computer's-IP>:8081` in the Quest browser. `serve.sh` / `serve.bat` print this link when they start. It needs no microphone, so plain http
 over your Wi-Fi works. To find the IP, run `ipconfig getifaddr en0` on a Mac, or `ipconfig` on
 Windows and look for the "IPv4 Address".
 
