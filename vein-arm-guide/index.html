@@ -286,10 +286,15 @@
     const server = params.get("server")
       || (location.pathname.startsWith("/arm") ? location.host : `${location.hostname || "localhost"}:8080`);
 
+    let pageVersion = null;
     function connect() {
       const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${server}/ws`);
       ws.onmessage = (e) => {
         const ev = JSON.parse(e.data);
+        if (ev.type === "snapshot" && ev.version) { // reload after an update and a server restart
+          if (pageVersion && ev.version !== pageVersion) { location.reload(); return; }
+          pageVersion = ev.version;
+        }
         if (ev.type === "snapshot" || ev.type === "region") {
           show(ev.region ? ev.region.site : null);
         }

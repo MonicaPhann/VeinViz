@@ -11,12 +11,13 @@ if ! "$PY" -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; th
   exit 1
 fi
 
-if [ ! -f .venv/installed.ok ]; then
-  echo "First run: setting up Python packages. This takes a few minutes..."
+# Install on the first run, and again whenever requirements.txt changes.
+if ! cmp -s requirements.txt .venv/installed.ok 2>/dev/null; then
+  echo "Setting up Python packages. This takes a few minutes the first time..."
   [ -x .venv/bin/python ] || "$PY" -m venv .venv
   .venv/bin/python -m pip install --upgrade pip
   .venv/bin/python -m pip install -r requirements.txt
-  touch .venv/installed.ok
+  cp requirements.txt .venv/installed.ok
 fi
 
 [ -f .env ] || cp .env.example .env

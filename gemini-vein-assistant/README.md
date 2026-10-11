@@ -65,6 +65,13 @@ Mic states: **grey** = off · **teal** = waiting for "Gemini" · **teal with rip
 
 The button in the top-right corner cycles the theme: light, dark and Frutiger Aero.
 
+## Spoken answers
+
+The server reads answers aloud with a local Piper voice and sends the audio to the device that asked, so every
+device sounds the same and devices whose browser has no voices (like the Meta Quest) still speak. The voice is
+downloaded once on the first start (about 60 MB, into `voices/`). If it isn't available, the page uses the
+browser's own voice instead.
+
 ## Second screen
 
 Any device on the same network can open `http://<this-computer's-IP>:8080` to follow the chat live.
@@ -117,6 +124,7 @@ loads three.js from the internet. To check it on a computer, add `?ar-preview` t
 | `CAMERA_STREAM_URL` | `http://192.168.1.143:8000/stream` |
 | `PORT` | `8080` |
 | `HTTPS_PORT` | `8443` (`off` to turn HTTPS off) |
+| `TTS_VOICE` | `en_US-lessac-medium`: the Piper voice that reads answers aloud (any voice from huggingface.co/rhasspy/piper-voices) |
 
 If your camera runs at a different address, change `CAMERA_STREAM_URL`.
 The chat lives in memory only. Restarting the server starts a fresh session.

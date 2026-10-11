@@ -12,3 +12,6 @@ captures/
 
 # self-signed HTTPS certificate and private key (made on each computer)
 certs/
+
+# downloaded speech voice
+voices/

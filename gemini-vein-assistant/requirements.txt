@@ -5,3 +5,4 @@ httpx==0.28.1
 python-dotenv==1.2.4
 faster-whisper==1.2.1
 numpy>=1.26
+piper-tts==1.8.0

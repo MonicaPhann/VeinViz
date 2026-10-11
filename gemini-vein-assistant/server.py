@@ -20,8 +20,8 @@ from pathlib import Path
 import httpx
 import numpy as np
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from google import genai
 from google.genai import types
@@ -35,6 +35,9 @@ MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest").strip()
 # "auto" times the laptop at startup and picks the most accurate model that stays quick on it.
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "auto").strip() or "auto"
 WHISPER_THREADS = min(os.cpu_count() or 4, 8)
+# Spoken answers: a Piper voice, downloaded once into voices/ (about 60 MB).
+TTS_VOICE = os.getenv("TTS_VOICE", "en_US-lessac-medium").strip()
+VOICES_DIR = BASE_DIR / "voices"
 CAMERA_URL = os.getenv("CAMERA_STREAM_URL", "http://192.168.1.143:8000/stream").strip()
 HISTORY_TURNS = int(os.getenv("HISTORY_TURNS", "20"))
 # HTTPS lets other devices use the mic and the Quest use AR. Set HTTPS_PORT=off to disable.
@@ -102,6 +105,7 @@ MIN_UTTERANCE_BYTES = int(SAMPLE_RATE * 2 * 0.25)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     threading.Thread(target=load_whisper, daemon=True).start()  # load in the background
+    threading.Thread(target=load_voice, daemon=True).start()
     yield
 
 
@@ -112,6 +116,20 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 if (ARM_DIR / "index.html").exists():
     app.mount("/arm", StaticFiles(directory=ARM_DIR, html=True), name="arm")
+
+
+def page_version() -> str:
+    """Changes whenever a page file changes; open pages reload themselves when it does."""
+    import hashlib
+    digest = hashlib.sha1()
+    for folder in (BASE_DIR / "static", ARM_DIR):
+        for f in sorted(folder.glob("*")):
+            if f.suffix in (".html", ".js", ".css"):
+                digest.update(f.name.encode() + f.read_bytes())
+    return digest.hexdigest()[:12]
+
+
+PAGE_VERSION = page_version()
 
 
 @app.middleware("http")
@@ -197,6 +215,49 @@ def transcribe(pcm: bytes, partial: bool) -> str | None:
         return text
     finally:
         whisper_lock.release()
+
+
+# ---- spoken answers ----
+tts_voice = None
+tts_lock = threading.Lock()
+
+
+def load_voice() -> None:
+    """Load the Piper voice, downloading it the first time. Without it, pages use the browser's voice."""
+    global tts_voice
+    try:
+        from piper import PiperVoice
+
+        model = VOICES_DIR / f"{TTS_VOICE}.onnx"
+        if not model.exists():
+            lang, speaker, quality = TTS_VOICE.split("-")  # e.g. en_US-lessac-medium
+            base = f"https://huggingface.co/rhasspy/piper-voices/resolve/main/{lang.split('_')[0]}/{lang}/{speaker}/{quality}/{TTS_VOICE}"
+            VOICES_DIR.mkdir(exist_ok=True)
+            print(f"[voice] downloading {TTS_VOICE} (one time, about 60 MB)...")
+            for suffix in (".onnx.json", ".onnx"):
+                target = VOICES_DIR / f"{TTS_VOICE}{suffix}"
+                part = target.with_name(target.name + ".part")
+                with httpx.stream("GET", base + suffix, follow_redirects=True, timeout=120) as resp:
+                    resp.raise_for_status()
+                    with open(part, "wb") as f:
+                        for chunk in resp.iter_bytes():
+                            f.write(chunk)
+                part.replace(target)
+        t = time.time()
+        tts_voice = PiperVoice.load(str(model))
+        print(f"[voice] {TTS_VOICE} ready in {time.time() - t:.1f}s")
+    except Exception as exc:
+        print(f"[voice] server voice unavailable ({exc!r}); devices will use their browser's voice")
+
+
+def synthesize(text: str) -> bytes:
+    import io
+    import wave
+
+    buf = io.BytesIO()
+    with tts_lock, wave.open(buf, "wb") as wav:
+        tts_voice.synthesize_wav(text, wav)
+    return buf.getvalue()
 
 
 async def broadcast(event: dict) -> None:
@@ -390,7 +451,7 @@ async def index() -> FileResponse:
 async def ws_endpoint(ws: WebSocket) -> None:
     await ws.accept()
     sockets.add(ws)
-    await ws.send_json({"type": "snapshot", "messages": messages, "region": current_region})
+    await ws.send_json({"type": "snapshot", "messages": messages, "region": current_region, "version": PAGE_VERSION})
     try:
         while True:
             data = await ws.receive_json()
@@ -400,6 +461,51 @@ async def ws_endpoint(ws: WebSocket) -> None:
         pass
     finally:
         sockets.discard(ws)
+
+
+@app.post("/api/tts")
+async def tts(request: Request) -> Response:
+    """One sentence of an answer -> WAV audio, so every device speaks with the same voice."""
+    text = str((await request.json()).get("text", "")).strip()[:600]
+    if tts_voice is None or not text:
+        return Response(status_code=503 if tts_voice is None else 400)
+    audio = await asyncio.to_thread(synthesize, text)
+    return Response(audio, media_type="audio/wav")
+
+
+@app.post("/api/mic-check")
+async def mic_check(request: Request) -> dict:
+    """A short clip from the browser's own recorder, sent when the live mic is silent: is there sound in it?"""
+    data = await request.body()
+    who = request.client.host if request.client else "?"
+
+    def measure() -> dict:
+        import io
+
+        import av
+
+        parts, rate = [], 0
+        with av.open(io.BytesIO(data)) as container:
+            stream = container.streams.audio[0]
+            rate = stream.rate
+            for frame in container.decode(stream):
+                arr = frame.to_ndarray()
+                if arr.dtype.kind in "iu":
+                    arr = arr.astype(np.float32) / np.iinfo(arr.dtype).max
+                parts.append(arr.astype(np.float32).ravel())
+        samples = np.concatenate(parts) if parts else np.zeros(0, np.float32)
+        level = float(np.sqrt(np.mean(samples ** 2))) if samples.size else 0.0
+        peak = float(np.max(np.abs(samples))) if samples.size else 0.0
+        return {"rate": rate, "level": round(level, 4), "peak": round(peak, 4)}
+
+    try:
+        info = await asyncio.to_thread(measure)
+        verdict = "HAS SOUND: the browser's audio engine is where it's lost" if info["peak"] > 0 else "SILENT too: the headset gives the browser no mic sound"
+        print(f"[mic check {who}] recorder clip at {info['rate']} Hz: level {info['level']} (peak {info['peak']}) -> {verdict}")
+    except Exception as exc:
+        info = {"error": repr(exc)}
+        print(f"[mic check {who}] couldn't read the recorder clip ({len(data)} bytes): {exc!r}")
+    return info
 
 
 @app.websocket("/audio")
@@ -416,6 +522,8 @@ async def audio_ws(ws: WebSocket) -> None:
         await ws.send_json({"type": "ready"})
 
     ready_task = asyncio.create_task(announce_ready())
+    who = ws.client.host if ws.client else "?"
+    reports = 0
     buf = bytearray()
     utt_id = 0
     active = False
@@ -443,7 +551,17 @@ async def audio_ws(ws: WebSocket) -> None:
                     partial_task = asyncio.create_task(send_partial(utt_id, bytes(buf)))
                 continue
             data = json.loads(msg.get("text") or "{}")
-            if data.get("type") == "start":
+            if data.get("type") == "stats":
+                # The page's mic report: logged for the first few reports, then every 10th.
+                reports += 1
+                if reports <= 4 or reports % 10 == 0:
+                    mic = data.get("mic") or {}
+                    print(f"[mic {who}] {data.get('sampleRate')} Hz, audio {data.get('audio')}, "
+                          f"{data.get('frames')} frames/3s, level {data.get('level')} (peak {data.get('peak')}), "
+                          f"speech threshold {data.get('threshold')}, speech starts {data.get('speechStarts')}, "
+                          f"engine peak {data.get('enginePeak')}, mode {data.get('mode')}, mic \"{mic.get('label', '?')}\" "
+                          f"at {mic.get('rate')} Hz (muted {mic.get('muted')}, enabled {mic.get('enabled')}, {mic.get('state')})")
+            elif data.get("type") == "start":
                 utt_id, active, last_partial = int(data.get("id", 0)), True, 0
                 buf = bytearray()
             elif data.get("type") == "end":
@@ -452,6 +570,8 @@ async def audio_ws(ws: WebSocket) -> None:
                 text = ""
                 if len(pcm) >= MIN_UTTERANCE_BYTES:
                     text = await asyncio.to_thread(transcribe, pcm, False) or ""
+                else:
+                    print(f"[speech] {who}: ignored a {len(pcm) / (SAMPLE_RATE * 2):.2f}s blip")
                 await ws.send_json({"type": "final", "id": utt_id, "text": text})
     except WebSocketDisconnect:
         pass
@@ -536,6 +656,17 @@ async def serve(port: int, https_port: int | None, cert: tuple[Path, Path] | Non
     await asyncio.gather(*tasks, return_exceptions=True)
 
 
+def port_in_use(port: int) -> bool:
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("0.0.0.0", port))
+            return False
+        except OSError:
+            return True
+
+
 if __name__ == "__main__":
     if not API_KEY:
         print("WARNING: GEMINI_API_KEY is not set in .env — answers will fail until it is.")
@@ -558,4 +689,11 @@ if __name__ == "__main__":
         print(f"  https://{host}:{https_port}   (first visit on each device: tap Advanced -> Proceed)")
         if (ARM_DIR / "index.html").exists():
             print(f"  Arm only: https://{host}:{https_port}/arm/")
+    busy = [p for p in (port, https_port if cert else None) if p and port_in_use(p)]
+    if busy:
+        ports = " and ".join(str(p) for p in busy)
+        print(f"\nPort {ports} is already in use: Vein Assist is probably still running in another window.")
+        print("Close that window or press Ctrl+C in it, then run this again.")
+        print(f"To see what's using it: lsof -i :{busy[0]}   (Windows: netstat -ano | findstr :{busy[0]})")
+        raise SystemExit(1)
     asyncio.run(serve(port, https_port, cert))

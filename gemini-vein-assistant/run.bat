@@ -4,12 +4,13 @@ rem The first run creates the virtual environment and installs the Python packag
 setlocal
 cd /d "%~dp0"
 
-if exist ".venv\installed.ok" goto :key
+rem Install on the first run, and again whenever requirements.txt changes.
+fc /b requirements.txt ".venv\installed.ok" >nul 2>&1 && goto :key
 call :find_python || goto :fail
-echo First run: installing Python packages, this can take a few minutes...
+echo Setting up Python packages, this can take a few minutes the first time...
 if not exist ".venv\Scripts\python.exe" %PY% -m venv .venv || goto :fail_setup
 ".venv\Scripts\python.exe" -m pip install -q -r requirements.txt || goto :fail_setup
-echo ok> ".venv\installed.ok"
+copy /y requirements.txt ".venv\installed.ok" >nul
 
 :key
 if not exist ".env" copy ".env.example" ".env" >nul

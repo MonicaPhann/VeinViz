@@ -24,6 +24,7 @@
   let awaitingReply = false;
   const items = new Map();      // id -> { data, el, body }
   let region = null;            // latest recommended region ({ site, label, reason })
+  let pageVersion = null;       // the server's page-file version this page was loaded with
   const watchers = new Set();   // the AR view redraws when anything here changes
   const changed = () => watchers.forEach((fn) => fn());
 
@@ -152,6 +153,9 @@
 
   function onEvent(ev) {
     if (ev.type === "snapshot") {
+      // After an update and a server restart, pick up the new page instead of running the old one.
+      if (ev.version && pageVersion && ev.version !== pageVersion) { location.reload(); return; }
+      pageVersion = ev.version || pageVersion;
       region = ev.region || null;
       items.clear();
       thread.querySelectorAll(".msg").forEach((n) => n.remove());
@@ -202,9 +206,14 @@
   }
 
   // ---------------- text to speech ----------------
+  // Answers are spoken sentence by sentence. The server turns each sentence into audio (Piper: the
+  // same voice on every device, and it works where the browser has no voices, like the Quest).
+  // If the server can't, the browser's own voice is used for that sentence instead.
   const tts = (() => {
     const synth = window.speechSynthesis;
-    let pending = 0, gen = 0, buf = "", finished = false, voice = null, watchdog = null;
+    const player = new Audio();
+    let queue = [], pumping = -1, gen = 0, buf = "", finished = false, voice = null;
+    let serverDownUntil = 0, stopCurrent = null;
 
     function pickVoice() {
       if (!synth) return null;
@@ -220,34 +229,74 @@
 
     const clean = (s) => s.replace(/[*_`#>]/g, "").replace(/^\s*[-•]\s+/gm, "").replace(/\s+/g, " ").trim();
 
+    async function serverAudio(text) { // a WAV for this sentence, or null if the server can't speak
+      if (Date.now() < serverDownUntil) return null;
+      try {
+        const r = await fetch("/api/tts", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return URL.createObjectURL(await r.blob());
+      } catch (err) {
+        console.warn("Server voice unavailable, using the browser's", err);
+        serverDownUntil = Date.now() + 60000; // try the server again in a minute
+        return null;
+      }
+    }
+
+    function playAudio(url) {
+      return new Promise((resolve) => {
+        const done = () => { player.onended = player.onerror = null; stopCurrent = null; resolve(); };
+        stopCurrent = () => { player.pause(); done(); };
+        player.onended = player.onerror = done;
+        player.src = url;
+        player.play().then(() => setState("speaking")).catch(done); // e.g. blocked: skip, don't hang
+      });
+    }
+
+    function playBrowserVoice(text) {
+      return new Promise((resolve) => {
+        if (!synth) return resolve();
+        const u = new SpeechSynthesisUtterance(text);
+        voice = voice || pickVoice();
+        if (voice) u.voice = voice;
+        u.rate = 1.05;
+        let watchdog = null;
+        const done = () => { clearTimeout(watchdog); stopCurrent = null; resolve(); };
+        watchdog = setTimeout(() => { synth.cancel(); done(); }, 8000); // never started: no voices here
+        u.onstart = () => { clearTimeout(watchdog); setState("speaking"); };
+        u.onend = u.onerror = done;
+        stopCurrent = () => { synth.cancel(); done(); };
+        synth.speak(u);
+      });
+    }
+
     function speak(text) {
       const t = clean(text);
-      if (!synth || !t || !micOn) return;
-      const myGen = gen;
-      const u = new SpeechSynthesisUtterance(t);
-      voice = voice || pickVoice();
-      if (voice) u.voice = voice;
-      u.rate = 1.05;
-      u.onstart = () => { clearTimeout(watchdog); if (myGen === gen) setState("speaking"); };
-      u.onend = u.onerror = () => {
-        if (myGen !== gen) return;
-        pending = Math.max(0, pending - 1);
-        settle();
-      };
-      if (pending === 0) {
-        // If audio never starts (no output device, stuck engine), don't hang the UI.
-        clearTimeout(watchdog);
-        watchdog = setTimeout(() => {
-          if (myGen !== gen || state === "speaking") return;
-          gen++; synth.cancel(); pending = 0; settle();
-        }, 6000);
+      if (!t || !micOn) return;
+      queue.push({ text: t, audio: serverAudio(t) }); // start making the audio straight away
+      if (pumping !== gen) pump(gen);
+    }
+
+    async function pump(myGen) { // play sentences in order; stops if a newer answer or "stop" comes in
+      pumping = myGen;
+      while (queue.length && myGen === gen) {
+        const item = queue.shift();
+        const url = await item.audio;
+        if (myGen !== gen) { if (url) URL.revokeObjectURL(url); break; }
+        if (url) {
+          await playAudio(url);
+          URL.revokeObjectURL(url);
+        } else {
+          await playBrowserVoice(item.text);
+        }
       }
-      pending++;
-      synth.speak(u);
+      if (pumping === myGen) pumping = -1;
+      if (myGen === gen) settle();
     }
 
     function settle() {
-      if (pending > 0) return;
+      if (pumping === gen || queue.length) return;
       if (finished) { myReplyId = null; setState(idleState()); }
       else if (state === "speaking") setState("generating");
     }
@@ -263,10 +312,10 @@
     }
 
     return {
-      reset() { gen++; pending = 0; buf = ""; finished = false; synth && synth.cancel(); },
+      reset() { gen++; queue = []; buf = ""; finished = false; stopCurrent?.(); },
       feed(text) { buf += text; flush(false); },
       finish() { flush(true); finished = true; settle(); },
-      stop() { gen++; pending = 0; buf = ""; finished = true; clearTimeout(watchdog); synth && synth.cancel(); },
+      stop() { gen++; queue = []; buf = ""; finished = true; stopCurrent?.(); },
       warm() { voice = pickVoice(); },
     };
   })();
@@ -371,7 +420,118 @@
   const listener = (() => {
     const START_FRAMES = 3, END_FRAMES = 35, MAX_FRAMES = 1000, PREROLL = 15; // 20 ms frames
     let ctx = null, stream = null, sock = null, ready = false;
-    let seq = 0, lastFinal = 0, inSpeech = false, voiced = 0, silent = 0, frames = 0, noise = 0.008, preroll = [];
+    // Speech starts when the level rises well above the room's background noise. The floor is low
+    // because some mics (like the Quest's in a browser) come through quietly.
+    const MIN_THRESHOLD = 0.005;
+    // Laptop mics sound best with the browser's voice processing; on some headsets (like the Quest)
+    // that processing hands over pure silence, so after 3 s of exact zeros we switch to the raw mic.
+    const MIC_MODES = {
+      processed: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      raw: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    };
+    const SILENT_FRAMES = 150; // 3 s of 20 ms frames
+    let mode = "processed", silentFrames = 0, source = null, workletNode = null, switching = false, noSound = false;
+    let analyser = null, analyserBuf = null, checked = false;
+
+    // Build (or rebuild) the audio engine around the current mic stream.
+    async function buildAudio(sampleRate) {
+      if (ctx) { const old = ctx; ctx = null; old.close().catch(() => {}); }
+      const c = sampleRate ? new AudioContext({ sampleRate }) : new AudioContext();
+      // Browsers can start audio paused unless a tap started it (an AR pinch may not count).
+      if (c.state === "suspended") c.resume().catch(() => {});
+      c.onstatechange = () => { if (state === "armed") setState("armed"); else changed(); };
+      const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
+      await c.audioWorklet.addModule(url);
+      const node = new AudioWorkletNode(c, "pcm16k");
+      node.port.onmessage = (e) => onFrame(e.data);
+      const mute = c.createGain();
+      mute.gain.value = 0; // keeps the graph pulling audio without playing it back
+      source = c.createMediaStreamSource(stream);
+      analyser = c.createAnalyser(); // a second listening point, straight off the mic, for the report
+      analyser.fftSize = 2048;
+      analyserBuf = new Float32Array(analyser.fftSize);
+      source.connect(node);
+      source.connect(analyser);
+      node.connect(mute).connect(c.destination);
+      workletNode = node;
+      ctx = c;
+    }
+
+    // Last resort before giving up: rebuild the engine at the mic's own sample rate.
+    async function useMicRate() {
+      switching = true;
+      try {
+        const rate = stream?.getAudioTracks()[0]?.getSettings().sampleRate;
+        const target = rate && rate !== ctx?.sampleRate ? rate : 16000;
+        await buildAudio(target);
+        mode = `raw@${target}`;
+        silentFrames = 0;
+      } catch (err) {
+        console.warn("Couldn't rebuild audio", err);
+        mode = "raw@failed";
+      } finally {
+        switching = false;
+      }
+    }
+
+    // If every way of reading the mic is silent, record 2.5 s with the browser's recorder (which
+    // skips the audio engine) and let the server measure it. Tells us where the sound is lost.
+    async function recorderCheck() {
+      if (checked || !stream || !window.MediaRecorder) return;
+      checked = true;
+      try {
+        const rec = new MediaRecorder(stream);
+        const chunks = [];
+        rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+        const stopped = new Promise((resolve) => { rec.onstop = resolve; });
+        rec.start();
+        await new Promise((r) => setTimeout(r, 2500));
+        rec.stop();
+        await stopped;
+        const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
+        await fetch("/api/mic-check", { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
+      } catch (err) {
+        console.warn("Recorder check failed", err);
+      }
+    }
+
+    async function useRawMic() {
+      switching = true;
+      try {
+        const raw = await navigator.mediaDevices.getUserMedia({ audio: MIC_MODES.raw });
+        if (!ctx) { raw.getTracks().forEach((t) => t.stop()); return; } // mic was turned off meanwhile
+        source?.disconnect();
+        stream?.getTracks().forEach((t) => t.stop());
+        stream = raw;
+        source = ctx.createMediaStreamSource(raw);
+        source.connect(workletNode);
+        source.connect(analyser);
+        mode = "raw";
+        silentFrames = 0;
+      } catch (err) {
+        console.warn("Raw mic not available", err);
+        mode = "raw"; // don't keep retrying
+      } finally {
+        switching = false;
+      }
+    }
+    let seq = 0, lastFinal = 0, inSpeech = false, voiced = 0, silent = 0, frames = 0, noise = 0.004, preroll = [];
+    // A short report to the server every few seconds while the mic is on, so problems show in its log.
+    let stats = { frames: 0, sum: 0, peak: 0, starts: 0, engine: 0 }, statsTimer = null;
+    function sendStats() {
+      sendJson({
+        type: "stats", sampleRate: ctx?.sampleRate, audio: ctx?.state, frames: stats.frames,
+        level: +(stats.sum / Math.max(1, stats.frames)).toFixed(4), peak: +stats.peak.toFixed(4),
+        threshold: +Math.max(MIN_THRESHOLD, noise * 3).toFixed(4), speechStarts: stats.starts,
+        enginePeak: +stats.engine.toFixed(4),
+        mode, mic: (() => {
+          const t = stream?.getAudioTracks()[0];
+          const set = t?.getSettings?.() || {};
+          return t ? { label: t.label, muted: t.muted, enabled: t.enabled, state: t.readyState, rate: set.sampleRate } : null;
+        })(),
+      });
+      stats = { frames: 0, sum: 0, peak: 0, starts: 0, engine: 0 };
+    }
 
     const sendJson = (o) => { if (sock && sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(o)); };
     const sendPcm = (b) => { if (sock && sock.readyState === WebSocket.OPEN) sock.send(b); };
@@ -384,7 +544,28 @@
     }
 
     function onFrame({ pcm, rms }) {
-      const thr = Math.max(0.012, noise * 3);
+      // A real mic always picks up some noise; exact zeros for 3 s means it isn't delivering sound.
+      silentFrames = rms === 0 ? silentFrames + 1 : 0;
+      if (silentFrames === SILENT_FRAMES && !switching) {
+        if (mode === "processed") useRawMic();
+        else if (mode === "raw") useMicRate();
+        else if (micOn) {
+          noSound = true;
+          setState("armed", "No sound from the mic · check it isn't muted on this device");
+          recorderCheck();
+        }
+      } else if (noSound && rms > 0) {
+        noSound = false; // sound is back (e.g. unmuted)
+        if (state === "armed") setState("armed");
+      }
+      if (analyser && stats.frames % 5 === 0) { // sample the second listening point 10x a second
+        analyser.getFloatTimeDomainData(analyserBuf);
+        for (const v of analyserBuf) stats.engine = Math.max(stats.engine, Math.abs(v));
+      }
+      stats.frames++;
+      stats.sum += rms;
+      stats.peak = Math.max(stats.peak, rms);
+      const thr = Math.max(MIN_THRESHOLD, noise * 3);
       if (!inSpeech) {
         preroll.push(pcm);
         if (preroll.length > PREROLL) preroll.shift();
@@ -394,6 +575,7 @@
           inSpeech = true; silent = 0; frames = 0; seq++;
           sendJson({ type: "start", id: seq });
           preroll.forEach(sendPcm); preroll = [];
+          stats.starts++;
           onVoiceStart();
         }
       } else {
@@ -427,24 +609,17 @@
       get paused() { return !!ctx && ctx.state !== "running"; },
       resume() { if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {}); },
       async start() {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        });
-        ctx = new AudioContext();
-        // Browsers can start audio paused unless a tap started it (an AR pinch may not count).
-        if (ctx.state === "suspended") ctx.resume().catch(() => {});
-        ctx.onstatechange = () => { if (state === "armed") setState("armed"); else changed(); };
-        const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
-        await ctx.audioWorklet.addModule(url);
-        const node = new AudioWorkletNode(ctx, "pcm16k");
-        node.port.onmessage = (e) => onFrame(e.data);
-        const mute = ctx.createGain();
-        mute.gain.value = 0; // keeps the graph pulling audio without playing it back
-        ctx.createMediaStreamSource(stream).connect(node);
-        node.connect(mute).connect(ctx.destination);
+        mode = "processed";
+        silentFrames = 0;
+        checked = false;
+        noSound = false;
+        stream = await navigator.mediaDevices.getUserMedia({ audio: MIC_MODES.processed });
+        await buildAudio();
         openSocket();
+        statsTimer = setInterval(sendStats, 3000);
       },
       stop() {
+        clearInterval(statsTimer);
         endUtterance();
         const s = stream; stream = null;
         if (s) s.getTracks().forEach((t) => t.stop());
@@ -520,6 +695,7 @@
     messages: () => [...items.values()].map((it) => it.data),
     region: () => region,
     toggleMic: () => toggleMic(),
+    ask: (text) => ask(text), // send a question as if it had been spoken after "Gemini"
     resumeAudio: () => { listener.resume(); if (state === "armed") setState("armed"); },
     onChange: (fn) => watchers.add(fn),
   };
