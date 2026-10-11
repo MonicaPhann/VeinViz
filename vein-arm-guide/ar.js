@@ -14,7 +14,7 @@ function setUp() { // load the 3D parts and build the scene once
     const stage = kit.createStage({ preview });
     const arm = await kit.createArm(document.querySelector("svg.arm"));
     stage.scene.add(arm.group);
-    stage.addGrabbable(arm.group, arm.hit);
+    stage.addGrabbable(arm.group, arm.hit, "arm");
     stage.onLayout(() => {
       stage.placeInFront(arm.group, { distance: 0.65, down: 0.12 });
       if (preview) stage.camera.lookAt(arm.group.position.x, arm.group.position.y - 0.05, arm.group.position.z);
@@ -26,7 +26,7 @@ function setUp() { // load the 3D parts and build the scene once
     state.ar = {
       presenting: stage.presenting,
       armPosition: () => arm.group.getWorldPosition(new kit.THREE.Vector3()).toArray().map((v) => +v.toFixed(3)),
-      armHeld: () => arm.group.parent !== stage.scene,
+      armHeld: stage.holding,
       region: arm.site,
       highlight: () => +arm.hit.material.opacity.toFixed(2), // grab frame brightness, 0-1
     };

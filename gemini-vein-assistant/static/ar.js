@@ -210,8 +210,8 @@ function setUp() { // load the 3D parts and build the scene once
     orbHit.position.set(orb.position.x, orb.position.y, -0.002);
     chat.add(panel, orb, panelHit, orbHit);
     stage.scene.add(chat);
-    stage.addButton(orbHit, () => { app.resumeAudio(); app.toggleMic(); });
-    stage.addGrabbable(chat, panelHit);
+    stage.addButton(orbHit, () => { app.resumeAudio(); app.toggleMic(); }, "mic orb");
+    stage.addGrabbable(chat, panelHit, "chat panel");
 
     // the arm, beside the chat (if the arm page is installed next to Vein Assist)
     let arm = null;
@@ -221,7 +221,7 @@ function setUp() { // load the 3D parts and build the scene once
       if (svg) {
         arm = await kit.createArm(svg);
         stage.scene.add(arm.group);
-        stage.addGrabbable(arm.group, arm.hit);
+        stage.addGrabbable(arm.group, arm.hit, "arm");
         await arm.setSite(app.region()?.site);
       }
     } catch (err) {
@@ -265,6 +265,7 @@ function setUp() { // load the 3D parts and build the scene once
       chatPosition: () => chat.getWorldPosition(new THREE.Vector3()).toArray().map((v) => +v.toFixed(3)),
       armPosition: () => arm?.group.getWorldPosition(new THREE.Vector3()).toArray().map((v) => +v.toFixed(3)),
       region: () => arm?.site() ?? null,
+      holding: stage.holding,
     };
     return stage;
   })();

@@ -70,7 +70,7 @@ export function hitArea(width, height) {
 
 // ---------- the stage ----------
 
-export function createStage({ preview = false } = {}) {
+export function createStage({ preview = false, logUrl = "/api/ar-log" } = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(devicePixelRatio);
   renderer.setSize(innerWidth, innerHeight);
@@ -124,90 +124,113 @@ export function createStage({ preview = false } = {}) {
   const rotation = new THREE.Matrix4();
   const local = new THREE.Vector3(), point = new THREE.Vector3(), normal = new THREE.Vector3();
   const quat = new THREE.Quaternion(), surface = new THREE.Plane();
-  function aim(controller) {
-    rotation.identity().extractRotation(controller.matrixWorld);
-    raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+  function aimFrom(matrix) { // point the raycaster along a hand's (or controller's) target ray
+    rotation.identity().extractRotation(matrix);
+    raycaster.ray.origin.setFromMatrixPosition(matrix);
     raycaster.ray.direction.set(0, 0, -1).applyMatrix4(rotation);
   }
-  // How far the hand is from a grab area, and how many degrees the pointer misses it by.
-  function nearMiss(hit) {
-    const { width, height } = hit.geometry.parameters;
-    const clampToArea = (v) => {
-      v.x = THREE.MathUtils.clamp(v.x, -width / 2, width / 2);
-      v.y = THREE.MathUtils.clamp(v.y, -height / 2, height / 2);
-    };
+  // How far the hand is from a rectangle on a grab area (half-width hw, half-height hh, centred on
+  // it), and how many degrees the pointer misses it by.
+  const meet = new THREE.Vector3(), closest = new THREE.Vector3();
+  function nearMiss(hit, hw, hh) {
     local.copy(raycaster.ray.origin);
     hit.worldToLocal(local);
-    const reach = Math.hypot(local.x - THREE.MathUtils.clamp(local.x, -width / 2, width / 2),
-                             local.y - THREE.MathUtils.clamp(local.y, -height / 2, height / 2), local.z);
+    const reach = Math.hypot(local.x - THREE.MathUtils.clamp(local.x, -hw, hw),
+                             local.y - THREE.MathUtils.clamp(local.y, -hh, hh), local.z);
     hit.getWorldPosition(point);
     normal.set(0, 0, 1).applyQuaternion(hit.getWorldQuaternion(quat));
     surface.setFromNormalAndCoplanarPoint(normal, point);
-    if (!raycaster.ray.intersectPlane(surface, point)) return { reach, angle: Infinity };
-    hit.worldToLocal(point);
-    clampToArea(point);
-    point.z = 0;
-    hit.localToWorld(point);
-    const angle = THREE.MathUtils.radToDeg(raycaster.ray.direction.angleTo(point.sub(raycaster.ray.origin).normalize()));
-    return { reach, angle };
+    if (!raycaster.ray.intersectPlane(surface, meet)) return { reach, angle: Infinity, distance: Infinity };
+    const distance = meet.distanceTo(raycaster.ray.origin);
+    closest.copy(meet);
+    hit.worldToLocal(closest);
+    closest.set(THREE.MathUtils.clamp(closest.x, -hw, hw), THREE.MathUtils.clamp(closest.y, -hh, hh), 0);
+    hit.localToWorld(closest);
+    const angle = THREE.MathUtils.radToDeg(raycaster.ray.direction.angleTo(closest.sub(raycaster.ray.origin).normalize()));
+    return { reach, angle, distance };
   }
-  function pick(controller) {
-    aim(controller);
+  function pick(matrix) {
+    aimFrom(matrix);
     const button = buttons.find((b) => b.hit.visible && raycaster.intersectObject(b.hit).length);
     if (button) return { button };
+    // The grab area (with its margin) decides whether a pinch can grab something; when areas
+    // overlap, the thing whose visible part you're pointing at (or reaching for) wins.
     let best = null;
     for (const g of grabbables) {
-      const { reach, angle } = nearMiss(g.hit);
-      const score = reach < REACH ? reach - 10 : angle <= AIM_TOLERANCE ? angle : Infinity; // reaching wins
+      const { width, height } = g.hit.geometry.parameters;
+      const outer = nearMiss(g.hit, width / 2, height / 2);
+      if (!(outer.reach < REACH || outer.angle <= AIM_TOLERANCE)) continue;
+      const inner = nearMiss(g.hit, Math.max(0.01, width / 2 - GRAB_MARGIN), Math.max(0.01, height / 2 - GRAB_MARGIN));
+      // Reaching wins over pointing; between equally good aims, the nearer thing (the one in front) wins.
+      const score = outer.reach < REACH ? inner.reach - 10 : inner.angle + 0.001 * inner.distance;
       if (score < (best?.score ?? Infinity)) best = { g, score };
     }
     return best ? { grab: best.g } : {};
   }
-  function selectStart(event) {
-    const controller = event.target;
-    release(controller); // in case a previous pinch never reported its end
-    const { button, grab } = pick(controller);
+
+  // ---- hands and controllers, read straight from the headset every frame ----
+  // A held object follows its hand's pose directly (it isn't parented to anything), and a hold ends
+  // when the pinch opens, when the headset drops that hand, or when AR is paused (e.g. another window
+  // was opened). Nothing is left that can go stale.
+  let session = null;
+  const rays = new Map();  // XRInputSource -> target ray pose (Matrix4, room coordinates), this frame
+  const holds = new Map(); // XRInputSource -> { item, offset } where offset = ray⁻¹ · object
+  const poseMatrix = new THREE.Matrix4(), moved = new THREE.Matrix4(), scale = new THREE.Vector3();
+  const hand = (source) => `${source.handedness || "?"} ${source.hand ? "hand" : source.targetRayMode}`;
+
+  function rayPose(source, xrFrame) {
+    const pose = xrFrame?.getPose(source.targetRaySpace, renderer.xr.getReferenceSpace());
+    return pose ? new THREE.Matrix4().fromArray(pose.transform.matrix) : null;
+  }
+  function letGo(source, why) {
+    const held = holds.get(source);
+    if (!held) return;
+    holds.delete(source);
+    faceViewer(held.item.group);
+    note(`${hand(source)} let go of the ${held.item.name} (${why})`);
+  }
+  function letGoOfEverything(why) { [...holds.keys()].forEach((source) => letGo(source, why)); }
+
+  function onSelectStart(event) {
+    const source = event.inputSource;
+    letGo(source, "new pinch"); // in case a previous pinch never reported its end
+    const ray = rayPose(source, event.frame) || rays.get(source);
+    if (!ray) return note(`${hand(source)} pinched, but its position wasn't known`);
+    const { button, grab } = pick(ray);
     if (button) {
+      note(`${hand(source)} pressed the ${button.name}`);
       button.press();
     } else if (grab) {
-      controller.attach(grab.group); // it follows the hand until the pinch ends
-      controller.userData.holding = grab;
+      grab.group.updateMatrixWorld();
+      holds.set(source, { item: grab, offset: ray.clone().invert().multiply(grab.group.matrixWorld) });
+      note(`${hand(source)} picked up the ${grab.name}`);
+    } else {
+      note(`${hand(source)} pinched, not pointing at anything`);
     }
   }
-  // Let go of whatever this hand or controller holds: it stays where it is, facing you.
-  function release(controller) {
-    const held = controller.userData.holding;
-    if (!held) return;
-    scene.attach(held.group);
-    controller.userData.holding = null;
-    faceViewer(held.group);
+  const onSelectEnd = (event) => letGo(event.inputSource, "pinch opened");
+  function onSourcesChange(event) {
+    for (const source of event.removed) {
+      note(`${hand(source)} lost`);
+      letGo(source, "hand lost");
+    }
+    for (const source of event.added) note(`${hand(source)} found`);
   }
-  const selectEnd = (event) => release(event.target);
-  const controllers = [0, 1].map((i) => {
-    const controller = renderer.xr.getController(i);
-    controller.addEventListener("selectstart", selectStart);
-    controller.addEventListener("selectend", selectEnd);
-    controller.addEventListener("connected", () => { controller.userData.connected = true; });
-    controller.addEventListener("disconnected", () => {
-      // A hand that loses tracking never sends "pinch ended": drop what it held instead of
-      // leaving it stuck to a hand that's gone.
-      release(controller);
-      controller.userData.connected = false;
-    });
-    scene.add(controller);
-    return controller;
-  });
+  function onVisibility() {
+    note(`AR view ${session.visibilityState}`);
+    if (session.visibilityState !== "visible") letGoOfEverything("AR paused");
+  }
 
   // Show a frame around whatever a pinch would grab or press (brighter while held).
   function updateHighlights() {
     for (const item of [...buttons, ...grabbables]) item.hit.userData.glow = 0;
-    for (const controller of controllers) {
-      if (!controller.userData.connected) continue;
-      if (controller.userData.holding) {
-        controller.userData.holding.hit.userData.glow = 1;
+    for (const [source, ray] of rays) {
+      const held = holds.get(source);
+      if (held) {
+        held.item.hit.userData.glow = 1;
         continue;
       }
-      const { button, grab } = pick(controller);
+      const { button, grab } = pick(ray);
       const target = (button || grab)?.hit;
       if (target) target.userData.glow = Math.max(target.userData.glow, 0.55);
     }
@@ -217,29 +240,66 @@ export function createStage({ preview = false } = {}) {
     }
   }
 
-  function frame() {
+  function trackInput(xrFrame) {
+    rays.clear();
+    for (const source of session.inputSources) {
+      if (source.targetRayMode === "gaze") continue;
+      const ray = rayPose(source, xrFrame);
+      if (ray) rays.set(source, ray);
+    }
+    for (const [source, held] of holds) {
+      if (![...session.inputSources].includes(source)) { letGo(source, "hand gone"); continue; }
+      const ray = rays.get(source);
+      if (!ray) continue; // briefly untracked: leave it where it is until the hand is seen again
+      moved.multiplyMatrices(ray, held.offset);
+      moved.decompose(held.item.group.position, held.item.group.quaternion, scale);
+    }
+    updateHighlights();
+  }
+
+  function frame(time, xrFrame) {
     // Wait a couple of frames for the headset pose, then lay things out in front of you.
     if (!placed && (renderer.xr.isPresenting || preview) && ++frames > 2) {
       layout();
       placed = true;
     }
     const now = performance.now();
-    if (renderer.xr.isPresenting) updateHighlights();
+    if (session && xrFrame) trackInput(xrFrame);
     frameFns.forEach((fn) => fn(now));
     renderer.render(scene, camera);
   }
 
   async function enterAR() {
-    const session = await navigator.xr.requestSession("immersive-ar", { optionalFeatures: ["local-floor", "hand-tracking"] });
+    const xr = await navigator.xr.requestSession("immersive-ar", { optionalFeatures: ["local-floor", "hand-tracking"] });
     placed = false;
     frames = 0;
-    await renderer.xr.setSession(session);
-    renderer.setAnimationLoop(frame);
-    session.addEventListener("end", () => {
-      controllers.forEach(release);
+    await renderer.xr.setSession(xr);
+    session = xr;
+    holds.clear();
+    xr.addEventListener("selectstart", onSelectStart);
+    xr.addEventListener("selectend", onSelectEnd);
+    xr.addEventListener("inputsourceschange", onSourcesChange);
+    xr.addEventListener("visibilitychange", onVisibility);
+    xr.addEventListener("end", () => {
+      letGoOfEverything("left AR");
+      session = null;
+      rays.clear();
       renderer.setAnimationLoop(null);
+      note("left AR");
     });
+    renderer.setAnimationLoop(frame);
+    note(`entered AR with ${[...xr.inputSources].map(hand).join(", ") || "no hands yet"}`);
   }
+
+  // A short log of AR events (hands found/lost, pauses, pinches) sent to the server's log, so a
+  // problem seen on the headset can be traced afterwards.
+  const pendingNotes = [];
+  function note(text) { pendingNotes.push(text); }
+  setInterval(() => {
+    if (!pendingNotes.length) return;
+    fetch(logUrl, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ page: document.title, lines: pendingNotes.splice(0) }) }).catch(() => {});
+  }, 2000);
 
   if (preview) { // desktop check: the same scene on a dark backdrop, standing in front of it
     document.documentElement.classList.add("ar-preview");
@@ -252,8 +312,9 @@ export function createStage({ preview = false } = {}) {
     presenting: () => renderer.xr.isPresenting,
     onLayout: (fn) => { layout = fn; placed = false; frames = 0; }, // lays out on the next frames
     onFrame: (fn) => frameFns.push(fn),
-    addButton: (hit, press) => buttons.push({ hit, press }),
-    addGrabbable: (group, hit) => grabbables.push({ group, hit }),
+    addButton: (hit, press, name = "button") => buttons.push({ hit, press, name }),
+    addGrabbable: (group, hit, name = "object") => grabbables.push({ group, hit, name }),
+    holding: () => [...holds.values()].map((h) => h.item.name).join(", "), // what's held right now
   };
 }
 

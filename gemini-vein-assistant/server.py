@@ -473,6 +473,16 @@ async def tts(request: Request) -> Response:
     return Response(audio, media_type="audio/wav")
 
 
+@app.post("/api/ar-log")
+async def ar_log(request: Request) -> dict:
+    """AR events from a headset (hands found/lost, pauses, pinches), printed so problems can be traced."""
+    data = await request.json()
+    who = request.client.host if request.client else "?"
+    for line in data.get("lines", [])[:50]:
+        print(f"[ar {who}] {str(line)[:200]}")
+    return {}
+
+
 @app.post("/api/mic-check")
 async def mic_check(request: Request) -> dict:
     """A short clip from the browser's own recorder, sent when the live mic is silent: is there sound in it?"""
