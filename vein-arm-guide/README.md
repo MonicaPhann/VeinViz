@@ -44,7 +44,8 @@ The arm floats in your real room as a glass hologram, with no browser window aro
    The first time, the browser warns the connection isn't private: tap **Advanced → Proceed**.
 3. Tap **View in AR** (top left) and allow it.
 4. The arm appears about 65 cm in front of you, a little below eye level, labelled with the recommended region.
-   To move it, point at it and pinch (or pull the trigger), carry it, and let go. It turns to face you.
+   To move it, point roughly at it (a soft frame lights up around whatever a pinch will grab) or reach
+   your hand near it, then pinch (or pull the trigger), carry it, and let go. It turns to face you.
 5. Say "Gemini, recommended region" and the region lights up in the headset. Press the Meta button to leave AR.
 
 Tip: Vein Assist has its own AR view (its https link, then **View in AR**) that shows the chat, the mic and

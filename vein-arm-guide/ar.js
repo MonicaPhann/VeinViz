@@ -27,6 +27,7 @@ function setUp() { // load the 3D parts and build the scene once
       presenting: stage.presenting,
       armPosition: () => arm.group.position.toArray().map((v) => +v.toFixed(3)),
       region: arm.site,
+      highlight: () => +arm.hit.material.opacity.toFixed(2), // grab frame brightness, 0-1
     };
     return stage;
   })();

@@ -17,6 +17,10 @@ export const SITES = {
 };
 
 export const FONT = `Figtree, "Segoe UI", system-ui, sans-serif`;
+// Grabbing is forgiving, because pointing with a hand wobbles:
+export const GRAB_MARGIN = 0.12;  // metres of extra grab area around each thing
+const AIM_TOLERANCE = 15;         // degrees: a pinch roughly pointed at something still grabs it
+const REACH = 0.35;               // metres: a pinch with the hand this close grabs it wherever you point
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // ---------- small helpers ----------
@@ -45,10 +49,22 @@ export function plane(width, height) {
   );
 }
 
-// An invisible, slightly larger target that makes things easy to point at.
+// A grab area: invisible until you point at it, then a faint glowing frame (brighter while held).
 export function hitArea(width, height) {
   const mesh = plane(width, height);
-  mesh.material.colorWrite = false;
+  const px = 512, py = Math.max(64, Math.round(512 * height / width));
+  mesh.material.map = canvasTexture((g, w, h) => {
+    g.fillStyle = "rgba(205, 240, 255, 0.10)";
+    g.strokeStyle = "rgba(205, 240, 255, 0.85)";
+    g.lineWidth = 6;
+    g.beginPath();
+    g.roundRect(4, 4, w - 8, h - 8, Math.min(w, h) * 0.12);
+    g.fill();
+    g.stroke();
+  }, px, py);
+  mesh.material.opacity = 0;
+  mesh.position.z = -0.004; // just behind what it belongs to
+  mesh.userData.glow = 0;
   return mesh;
 }
 
@@ -102,44 +118,96 @@ export function createStage({ preview = false } = {}) {
     faceViewer(group);
   }
 
-  // Pinch (or trigger): press a button you point at, otherwise pick up what you point at.
+  // Pinch (or trigger): press a button you point at, otherwise pick up the thing you're
+  // pointing at, roughly pointing at, or reaching for.
   const raycaster = new THREE.Raycaster();
   const rotation = new THREE.Matrix4();
+  const local = new THREE.Vector3(), point = new THREE.Vector3(), normal = new THREE.Vector3();
+  const quat = new THREE.Quaternion(), surface = new THREE.Plane();
   function aim(controller) {
     rotation.identity().extractRotation(controller.matrixWorld);
     raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
     raycaster.ray.direction.set(0, 0, -1).applyMatrix4(rotation);
   }
-  function selectStart(event) {
-    const controller = event.target;
+  // How far the hand is from a grab area, and how many degrees the pointer misses it by.
+  function nearMiss(hit) {
+    const { width, height } = hit.geometry.parameters;
+    const clampToArea = (v) => {
+      v.x = THREE.MathUtils.clamp(v.x, -width / 2, width / 2);
+      v.y = THREE.MathUtils.clamp(v.y, -height / 2, height / 2);
+    };
+    local.copy(raycaster.ray.origin);
+    hit.worldToLocal(local);
+    const reach = Math.hypot(local.x - THREE.MathUtils.clamp(local.x, -width / 2, width / 2),
+                             local.y - THREE.MathUtils.clamp(local.y, -height / 2, height / 2), local.z);
+    hit.getWorldPosition(point);
+    normal.set(0, 0, 1).applyQuaternion(hit.getWorldQuaternion(quat));
+    surface.setFromNormalAndCoplanarPoint(normal, point);
+    if (!raycaster.ray.intersectPlane(surface, point)) return { reach, angle: Infinity };
+    hit.worldToLocal(point);
+    clampToArea(point);
+    point.z = 0;
+    hit.localToWorld(point);
+    const angle = THREE.MathUtils.radToDeg(raycaster.ray.direction.angleTo(point.sub(raycaster.ray.origin).normalize()));
+    return { reach, angle };
+  }
+  function pick(controller) {
     aim(controller);
     const button = buttons.find((b) => b.hit.visible && raycaster.intersectObject(b.hit).length);
+    if (button) return { button };
+    let best = null;
+    for (const g of grabbables) {
+      const { reach, angle } = nearMiss(g.hit);
+      const score = reach < REACH ? reach - 10 : angle <= AIM_TOLERANCE ? angle : Infinity; // reaching wins
+      if (score < (best?.score ?? Infinity)) best = { g, score };
+    }
+    return best ? { grab: best.g } : {};
+  }
+  function selectStart(event) {
+    const controller = event.target;
+    const { button, grab } = pick(controller);
     if (button) {
       button.press();
-      return;
-    }
-    const hits = grabbables
-      .map((g) => ({ g, hit: raycaster.intersectObject(g.hit)[0] }))
-      .filter((x) => x.hit)
-      .sort((a, b) => a.hit.distance - b.hit.distance);
-    if (hits.length) {
-      controller.attach(hits[0].g.group); // it follows the hand until the pinch ends
-      controller.userData.holding = hits[0].g.group;
+    } else if (grab) {
+      controller.attach(grab.group); // it follows the hand until the pinch ends
+      controller.userData.holding = grab;
     }
   }
   function selectEnd(event) {
     const controller = event.target;
-    const group = controller.userData.holding;
-    if (!group) return;
-    scene.attach(group);
+    const held = controller.userData.holding;
+    if (!held) return;
+    scene.attach(held.group);
     controller.userData.holding = null;
-    faceViewer(group);
+    faceViewer(held.group);
   }
-  for (const i of [0, 1]) {
+  const controllers = [0, 1].map((i) => {
     const controller = renderer.xr.getController(i);
     controller.addEventListener("selectstart", selectStart);
     controller.addEventListener("selectend", selectEnd);
+    controller.addEventListener("connected", () => { controller.userData.connected = true; });
+    controller.addEventListener("disconnected", () => { controller.userData.connected = false; });
     scene.add(controller);
+    return controller;
+  });
+
+  // Show a frame around whatever a pinch would grab or press (brighter while held).
+  function updateHighlights() {
+    for (const item of [...buttons, ...grabbables]) item.hit.userData.glow = 0;
+    for (const controller of controllers) {
+      if (!controller.userData.connected) continue;
+      if (controller.userData.holding) {
+        controller.userData.holding.hit.userData.glow = 1;
+        continue;
+      }
+      const { button, grab } = pick(controller);
+      const target = (button || grab)?.hit;
+      if (target) target.userData.glow = Math.max(target.userData.glow, 0.55);
+    }
+    for (const item of [...buttons, ...grabbables]) {
+      const m = item.hit.material;
+      m.opacity += (item.hit.userData.glow - m.opacity) * 0.25; // ease in and out
+    }
   }
 
   function frame() {
@@ -149,6 +217,7 @@ export function createStage({ preview = false } = {}) {
       placed = true;
     }
     const now = performance.now();
+    if (renderer.xr.isPresenting) updateHighlights();
     frameFns.forEach((fn) => fn(now));
     renderer.render(scene, camera);
   }
@@ -263,7 +332,7 @@ export async function createArm(source) {
   const labelMesh = plane(LABEL_WIDTH, labelH);
   labelMesh.material.map = canvasTexture((g, w, h) => drawLabel(g, w, h, site), ...LABEL_PX);
   labelMesh.position.y = -ARM_HEIGHT / 2 - labelH / 2 - 0.012;
-  const hit = hitArea(armW * 1.8, ARM_HEIGHT + labelH + 0.08);
+  const hit = hitArea(armW + 2 * GRAB_MARGIN, ARM_HEIGHT + labelH + 2 * GRAB_MARGIN);
   hit.position.y = -labelH / 2;
   group.add(armMesh, glowMesh, labelMesh, hit);
 

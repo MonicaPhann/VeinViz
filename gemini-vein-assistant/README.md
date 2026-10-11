@@ -98,7 +98,8 @@ included here; the arm page's own AR view is still there if you only want the ar
    The first time, tap **Advanced → Proceed**.
 2. Tap the mic once and allow microphone access (easier to answer the permission prompt before AR).
 3. Tap **View in AR** (top right).
-4. **Pinch the orb** to turn the mic on or off. Point at the chat panel or the arm and **pinch to move it**.
+4. **Pinch the orb** to turn the mic on or off. To **move the chat or the arm**, point roughly at it (a soft
+   frame lights up around whatever a pinch will grab) or reach your hand near it, then pinch and carry it.
    Press the Meta button to leave AR.
 
 The orb shows the same states as the page: still when off or waiting for "Gemini", ripples while you're

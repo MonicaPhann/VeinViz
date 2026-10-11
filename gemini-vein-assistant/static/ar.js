@@ -205,10 +205,9 @@ function setUp() { // load the 3D parts and build the scene once
     const orb = kit.plane(ORB.size, orbH);
     orb.material.map = kit.canvasTexture((g, w, h) => drawOrb(g, w, h, performance.now(), FONT), ...ORB.px);
     orb.position.y = -panelH / 2 - orbH / 2 - 0.015;
-    const panelHit = kit.hitArea(PANEL.w + 0.04, panelH + 0.04);
-    const orbHit = kit.hitArea(ORB.size * 0.8, orbH * 1.1);
-    orbHit.position.copy(orb.position);
-    orbHit.position.z = 0.003;
+    const panelHit = kit.hitArea(PANEL.w + 2 * kit.GRAB_MARGIN, panelH + 2 * kit.GRAB_MARGIN);
+    const orbHit = kit.hitArea(ORB.size * 0.8, orbH * 1.1); // pinch here toggles the mic
+    orbHit.position.set(orb.position.x, orb.position.y, -0.002);
     chat.add(panel, orb, panelHit, orbHit);
     stage.scene.add(chat);
     stage.addButton(orbHit, () => app.toggleMic());
