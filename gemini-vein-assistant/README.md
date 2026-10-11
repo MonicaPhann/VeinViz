@@ -97,17 +97,21 @@ keep working as before.
 
 ## AR on the Meta Quest (passthrough)
 
-Vein Assist can float in your real room: the chat as a glass panel, the mic orb under it, and the arm
-hologram beside it, lighting up the recommended region. (The Quest runs one AR page at a time, so the arm is
-included here; the arm page's own AR view is still there if you only want the arm.)
+Vein Assist can float in your real room: the **live vein camera** in the middle, the chat as a glass panel
+with the mic orb on the left, and the arm hologram on the right, lighting up the recommended region. Everything
+is in one AR view, so you never need a second browser window (on the Quest, opening another window pauses AR).
+The camera feed is passed through this server at `/camera/stream` (from `CAMERA_STREAM_URL`), because an https
+page can't load the camera's plain-http stream directly; it only streams while AR is open, and shows
+"Vein camera offline" (and keeps retrying) if the camera isn't running.
 
 1. On the Quest, open the **HTTPS** link Vein Assist prints, e.g. `https://192.168.1.143:8443`.
    The first time, tap **Advanced → Proceed**.
 2. Tap the mic once and allow microphone access (easier to answer the permission prompt before AR).
 3. Tap **View in AR** (top right).
-4. **Pinch the orb** to turn the mic on or off. To **move the chat or the arm**, point roughly at it (a soft
+4. **Pinch the orb** to turn the mic on or off. To **move the camera, the chat or the arm**, point roughly at it (a soft
    frame lights up around whatever a pinch will grab) or reach your hand near it, then pinch and carry it.
-   Press the Meta button to leave AR.
+   Press the Meta button to leave AR. If you do open another window, AR closes itself after 5 seconds;
+   come back and tap **View in AR** again.
 
 The orb shows the same states as the page: still when off or waiting for "Gemini", ripples while you're
 talking to it, a spinning arc while it thinks, and bars while it speaks. Answers stream onto the panel as

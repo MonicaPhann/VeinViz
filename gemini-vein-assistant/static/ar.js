@@ -1,5 +1,6 @@
 // Vein Assist in passthrough AR (Meta Quest browser).
-// A glass chat panel with the mic orb under it, and the arm hologram beside it, floating in the room.
+// The live vein camera in the middle, a glass chat panel with the mic orb on the left, and the arm
+// hologram on the right, floating in the room, so nothing needs a second browser window.
 // Pinch the orb to turn the mic on or off; point at the panel or the arm and pinch to move it.
 // The Quest runs one AR page at a time, so the arm lives here too. The 3D parts come from the
 // arm page's ar-kit.js (served at /arm/), and load only on devices that can do AR.
@@ -12,6 +13,7 @@ const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const PANEL = { w: 0.5, px: [1024, 900] };   // metres wide, canvas pixels
 const ORB = { size: 0.175, px: [560, 460] }; // the orb itself stays about 7.5 cm across
+const CAMERA = { w: 0.56, px: [1024, 576] }; // the live camera view, 16:9
 const COLORS = { off: "#8a97a8", armed: "#2dd4bf", addressed: "#2dd4bf", generating: "#a5b4fc", speaking: "#7cb3ff" };
 const ICONS = { // Lucide paths, 24x24
   mic: ["M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z", "M19 10v2a7 7 0 0 1-14 0v-2", "M12 19v3"],
@@ -186,6 +188,108 @@ function drawOrb(g, w, h, now, FONT) {
   g.fillText(state === "off" ? "Pinch to turn the mic on" : app.status(), cx, h - 44);
 }
 
+// ---------- the live vein camera ----------
+
+// Read the camera's MJPEG stream (passed through this server at /camera/stream) and hand over the
+// newest frame as an ImageBitmap. Decodes one frame at a time and skips the rest, so it never lags.
+function startCameraFeed(onFrame, onStatus) {
+  let stopped = false, controller = null;
+  const indexOfPair = (buf, a, b, from) => {
+    for (let i = buf.indexOf(a, from); i !== -1 && i < buf.length - 1; i = buf.indexOf(a, i + 1)) {
+      if (buf[i + 1] === b) return i;
+    }
+    return -1;
+  };
+  (async () => {
+    while (!stopped) {
+      controller = new AbortController();
+      try {
+        const r = await fetch("/camera/stream", { signal: controller.signal, cache: "no-store" });
+        if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
+        const reader = r.body.getReader();
+        let buf = new Uint8Array(0), decoding = false;
+        while (!stopped) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const merged = new Uint8Array(buf.length + value.length);
+          merged.set(buf);
+          merged.set(value, buf.length);
+          buf = merged;
+          let newest = null, from = 0;
+          for (;;) { // pull out every complete JPEG (FFD8 ... FFD9), keep the newest
+            const start = indexOfPair(buf, 0xff, 0xd8, from);
+            if (start === -1) break;
+            const end = indexOfPair(buf, 0xff, 0xd9, start + 2);
+            if (end === -1) { from = start; break; }
+            newest = buf.subarray(start, end + 2);
+            from = end + 2;
+          }
+          if (newest && !decoding) {
+            decoding = true;
+            onStatus("live");
+            createImageBitmap(new Blob([newest.slice()], { type: "image/jpeg" }))
+              .then(onFrame, () => {}).finally(() => { decoding = false; });
+          }
+          buf = buf.slice(from);
+          if (buf.length > 8e6) buf = new Uint8Array(0); // never let a broken stream pile up
+        }
+      } catch (err) {
+        if (stopped) break;
+      }
+      if (!stopped) {
+        onStatus("offline");
+        await new Promise((r) => setTimeout(r, 3000)); // try again
+      }
+    }
+  })();
+  return { stop() { stopped = true; controller?.abort(); } };
+}
+
+function drawCamera(g, w, h, frame, status, FONT) {
+  g.fillStyle = "rgba(6, 14, 24, 0.85)";
+  g.beginPath();
+  g.roundRect(0, 0, w, h, 36);
+  g.fill();
+  if (frame && status === "live") {
+    g.save();
+    g.beginPath();
+    g.roundRect(6, 6, w - 12, h - 12, 32);
+    g.clip();
+    const scale = Math.min((w - 12) / frame.width, (h - 12) / frame.height); // fit, keep its shape
+    const dw = frame.width * scale, dh = frame.height * scale;
+    g.drawImage(frame, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    g.restore();
+  } else {
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillStyle = "#e8edf2";
+    g.font = `600 44px ${FONT}`;
+    g.fillText(status === "offline" ? "Vein camera offline" : "Connecting to the vein camera\u2026", w / 2, h / 2 - 24);
+    g.fillStyle = "#9aa6b2";
+    g.font = `500 30px ${FONT}`;
+    g.fillText(status === "offline" ? "Start the camera stream (port 8000) \u00b7 retrying" : "", w / 2, h / 2 + 34);
+  }
+  // a small "live" tag, top left
+  g.fillStyle = "rgba(6, 14, 24, 0.7)";
+  g.beginPath();
+  g.roundRect(24, 22, 300, 52, 26);
+  g.fill();
+  g.fillStyle = status === "live" ? "#f97066" : "#8a97a8";
+  g.beginPath();
+  g.arc(52, 48, 9, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#e8edf2";
+  g.font = `600 26px ${FONT}`;
+  g.textAlign = "left";
+  g.textBaseline = "middle";
+  g.fillText(status === "live" ? "LIVE \u00b7 Vein camera" : "Vein camera", 72, 49);
+  g.strokeStyle = "rgba(205, 240, 255, 0.35)";
+  g.lineWidth = 3;
+  g.beginPath();
+  g.roundRect(1.5, 1.5, w - 3, h - 3, 36);
+  g.stroke();
+}
+
 // ---------- scene ----------
 
 let ready = null;
@@ -218,6 +322,30 @@ function setUp() { // load the 3D parts and build the scene once
     stage.addButton(orbHit, () => { app.resumeAudio(); app.toggleMic(); }, "mic orb");
     stage.addGrabbable(chat, panelHit, "chat panel");
 
+    // the live vein camera, in the middle; streams only while AR is open
+    const camera = new THREE.Group();
+    const cameraH = CAMERA.w * CAMERA.px[1] / CAMERA.px[0];
+    const cameraPanel = kit.plane(CAMERA.w, cameraH);
+    let cameraFrame = null, cameraStatus = "connecting", cameraFrames = 0, feed = null;
+    const cameraTexture = kit.canvasTexture((g, w, h) => drawCamera(g, w, h, cameraFrame, cameraStatus, FONT), ...CAMERA.px);
+    cameraPanel.material.map = cameraTexture;
+    const cameraHit = kit.hitArea(CAMERA.w + 2 * kit.GRAB_MARGIN, cameraH + 2 * kit.GRAB_MARGIN);
+    camera.add(cameraPanel, cameraHit);
+    stage.scene.add(camera);
+    stage.addGrabbable(camera, cameraHit, "camera view");
+    stage.onStart(() => {
+      feed?.stop();
+      feed = startCameraFeed((bitmap) => {
+        cameraFrame?.close();
+        cameraFrame = bitmap;
+        cameraFrames++;
+        cameraTexture.redraw();
+      }, (status) => {
+        if (status !== cameraStatus) { cameraStatus = status; cameraTexture.redraw(); }
+      });
+    });
+    stage.onEnd(() => { feed?.stop(); feed = null; });
+
     // the arm, beside the chat (if the arm page is installed next to Vein Assist)
     let arm = null;
     try {
@@ -233,10 +361,12 @@ function setUp() { // load the 3D parts and build the scene once
       console.warn("Arm page not available, showing the chat only", err);
     }
 
+    // camera straight ahead, chat to the left, arm to the right (each turned to face you)
     stage.onLayout(() => {
-      stage.placeInFront(chat, { distance: 0.8, right: arm ? -0.17 : 0, down: 0.02 });
-      if (arm) stage.placeInFront(arm.group, { distance: 0.75, right: 0.27, down: 0.08 });
-      if (preview) stage.camera.lookAt(chat.position.x + (arm ? 0.08 : 0), chat.position.y - 0.05, chat.position.z);
+      stage.placeInFront(camera, { distance: 0.85, right: 0, down: -0.02 });
+      stage.placeInFront(chat, { distance: 0.8, right: -0.58, down: 0.06 });
+      if (arm) stage.placeInFront(arm.group, { distance: 0.78, right: 0.48, down: 0.1 });
+      if (preview) stage.camera.lookAt(camera.position.x - 0.05, camera.position.y - 0.12, camera.position.z);
     });
 
     // redraw the panel when the chat changes (at most ~12 times a second while an answer streams in)
@@ -271,6 +401,8 @@ function setUp() { // load the 3D parts and build the scene once
       armPosition: () => arm?.group.getWorldPosition(new THREE.Vector3()).toArray().map((v) => +v.toFixed(3)),
       region: () => arm?.site() ?? null,
       holding: stage.holding,
+      cameraPosition: () => camera.getWorldPosition(new THREE.Vector3()).toArray().map((v) => +v.toFixed(3)),
+      camera: () => ({ status: cameraStatus, framesShown: cameraFrames }),
     };
     return stage;
   })();

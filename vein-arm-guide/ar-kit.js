@@ -93,6 +93,7 @@ export function createStage({ preview = false, logUrl = "/api/ar-log" } = {}) {
   const grabbables = []; // { group, hit }
   const frameFns = [];
   const endFns = [];
+  const startFns = [];
   let layout = () => {};
   let placed = false, frames = 0;
 
@@ -306,6 +307,7 @@ export function createStage({ preview = false, logUrl = "/api/ar-log" } = {}) {
       endFns.forEach((fn) => fn(endReason)); // "paused" (closed after being away) or "closed"
     });
     renderer.setAnimationLoop(frame);
+    startFns.forEach((fn) => fn());
     note(`entered AR with ${[...xr.inputSources].map(hand).join(", ") || "no hands yet"}`);
   }
 
@@ -330,6 +332,7 @@ export function createStage({ preview = false, logUrl = "/api/ar-log" } = {}) {
     presenting: () => renderer.xr.isPresenting,
     onLayout: (fn) => { layout = fn; placed = false; frames = 0; }, // lays out on the next frames
     onFrame: (fn) => frameFns.push(fn),
+    onStart: (fn) => { startFns.push(fn); if (preview) fn(); }, // AR started (or the desktop preview)
     onEnd: (fn) => endFns.push(fn), // called with "paused" or "closed" when AR ends
     addButton: (hit, press, name = "button") => buttons.push({ hit, press, name }),
     addGrabbable: (group, hit, name = "object") => grabbables.push({ group, hit, name }),

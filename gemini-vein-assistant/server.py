@@ -21,7 +21,7 @@ import httpx
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from google import genai
 from google.genai import types
@@ -471,6 +471,34 @@ async def tts(request: Request) -> Response:
         return Response(status_code=503 if tts_voice is None else 400)
     audio = await asyncio.to_thread(synthesize, text)
     return Response(audio, media_type="audio/wav")
+
+
+@app.get("/camera/stream")
+async def camera_stream() -> Response:
+    """The vein camera's live MJPEG feed, passed through this server so https pages (the Quest's AR view)
+    can show it: browsers block an https page from loading the camera's plain-http stream directly."""
+    if not CAMERA_URL:
+        return Response("No camera configured (CAMERA_STREAM_URL)", status_code=404)
+    http = httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=2.0))
+    try:
+        upstream = await http.send(http.build_request("GET", CAMERA_URL), stream=True)
+        upstream.raise_for_status()
+    except Exception as exc:
+        await http.aclose()
+        return Response(f"Camera not reachable at {CAMERA_URL} ({exc.__class__.__name__})", status_code=503)
+
+    async def relay():
+        try:
+            async for chunk in upstream.aiter_raw():
+                yield chunk
+        except Exception:
+            pass  # camera stopped or the viewer left
+        finally:
+            await upstream.aclose()
+            await http.aclose()
+
+    media_type = upstream.headers.get("content-type", "multipart/x-mixed-replace; boundary=frame")
+    return StreamingResponse(relay(), media_type=media_type)
 
 
 @app.post("/api/ar-log")

@@ -41,7 +41,7 @@ Other devices on this network: http://192.168.1.143:8080
 | Camera stream | `http://<computer-ip>:8000` |
 | Vein Assist | `http://<computer-ip>:8080` |
 | Arm page | `http://<computer-ip>:8081` |
-| Vein Assist over https (mic on any device, and AR on the Quest: chat + mic + arm) | `https://<computer-ip>:8443` |
+| Vein Assist over https (mic on any device, and AR on the Quest: live camera + chat + mic + arm) | `https://<computer-ip>:8443` |
 | Arm in AR on the Quest (passthrough) | `https://<computer-ip>:8443/arm/` |
 
 Find the IP with `ipconfig getifaddr en0` (Mac) or `ipconfig` and the "IPv4 Address" (Windows). On Windows, click
