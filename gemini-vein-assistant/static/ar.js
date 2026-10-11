@@ -210,6 +210,11 @@ function setUp() { // load the 3D parts and build the scene once
     orbHit.position.set(orb.position.x, orb.position.y, -0.002);
     chat.add(panel, orb, panelHit, orbHit);
     stage.scene.add(chat);
+    stage.onEnd((reason) => {
+      if (reason !== "paused") return;
+      hint.textContent = "AR was closed while you were in another window. Tap View in AR to go back in.";
+      hint.hidden = false;
+    });
     stage.addButton(orbHit, () => { app.resumeAudio(); app.toggleMic(); }, "mic orb");
     stage.addGrabbable(chat, panelHit, "chat panel");
 
@@ -276,6 +281,7 @@ async function enterAR() {
   button.disabled = true;
   try {
     const stage = await setUp();
+    hint.hidden = true;
     await stage.enterAR();
   } catch (err) {
     console.error(err);

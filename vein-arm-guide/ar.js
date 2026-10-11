@@ -19,6 +19,11 @@ function setUp() { // load the 3D parts and build the scene once
       stage.placeInFront(arm.group, { distance: 0.65, down: 0.12 });
       if (preview) stage.camera.lookAt(arm.group.position.x, arm.group.position.y - 0.05, arm.group.position.z);
     });
+    stage.onEnd((reason) => {
+      if (reason !== "paused") return;
+      hint.textContent = "AR was closed while you were in another window. Tap View in AR to go back in.";
+      hint.hidden = false;
+    });
     stage.onFrame((now) => arm.update(now));
     state.onChange(arm.setSite);
     await arm.setSite(state.current());
@@ -39,6 +44,7 @@ async function enterAR() {
   button.disabled = true;
   try {
     const stage = await setUp();
+    hint.hidden = true;
     await stage.enterAR();
   } catch (err) {
     console.error(err);

@@ -92,6 +92,7 @@ export function createStage({ preview = false, logUrl = "/api/ar-log" } = {}) {
   const buttons = [];    // { hit, press }
   const grabbables = []; // { group, hit }
   const frameFns = [];
+  const endFns = [];
   let layout = () => {};
   let placed = false, frames = 0;
 
@@ -216,9 +217,23 @@ export function createStage({ preview = false, logUrl = "/api/ar-log" } = {}) {
     }
     for (const source of event.added) note(`${hand(source)} found`);
   }
+  // When another window is opened, the Quest pauses AR ("visible-blurred") and disconnects the hands
+  // and controllers, and often never hands them back. So if AR stays paused for a few seconds, close
+  // it: you come back to the page and tap View in AR again, with everything working.
+  const PAUSE_LIMIT_MS = 5000;
+  let pauseTimer = null, endReason = "closed";
   function onVisibility() {
     note(`AR view ${session.visibilityState}`);
-    if (session.visibilityState !== "visible") letGoOfEverything("AR paused");
+    clearTimeout(pauseTimer);
+    if (session.visibilityState === "visible") return;
+    letGoOfEverything("AR paused");
+    const paused = session;
+    pauseTimer = setTimeout(() => {
+      if (session !== paused || paused.visibilityState === "visible") return;
+      note("AR stayed paused, so it was closed; tap View in AR to go back in");
+      endReason = "paused";
+      paused.end().catch(() => {});
+    }, PAUSE_LIMIT_MS);
   }
 
   // Show a frame around whatever a pinch would grab or press (brighter while held).
@@ -275,17 +290,20 @@ export function createStage({ preview = false, logUrl = "/api/ar-log" } = {}) {
     frames = 0;
     await renderer.xr.setSession(xr);
     session = xr;
+    endReason = "closed";
     holds.clear();
     xr.addEventListener("selectstart", onSelectStart);
     xr.addEventListener("selectend", onSelectEnd);
     xr.addEventListener("inputsourceschange", onSourcesChange);
     xr.addEventListener("visibilitychange", onVisibility);
     xr.addEventListener("end", () => {
+      clearTimeout(pauseTimer);
       letGoOfEverything("left AR");
       session = null;
       rays.clear();
       renderer.setAnimationLoop(null);
       note("left AR");
+      endFns.forEach((fn) => fn(endReason)); // "paused" (closed after being away) or "closed"
     });
     renderer.setAnimationLoop(frame);
     note(`entered AR with ${[...xr.inputSources].map(hand).join(", ") || "no hands yet"}`);
@@ -312,6 +330,7 @@ export function createStage({ preview = false, logUrl = "/api/ar-log" } = {}) {
     presenting: () => renderer.xr.isPresenting,
     onLayout: (fn) => { layout = fn; placed = false; frames = 0; }, // lays out on the next frames
     onFrame: (fn) => frameFns.push(fn),
+    onEnd: (fn) => endFns.push(fn), // called with "paused" or "closed" when AR ends
     addButton: (hit, press, name = "button") => buttons.push({ hit, press, name }),
     addGrabbable: (group, hit, name = "object") => grabbables.push({ group, hit, name }),
     holding: () => [...holds.values()].map((h) => h.item.name).join(", "), // what's held right now

@@ -495,6 +495,37 @@
       }
     }
 
+    // The headset can stop the mic (e.g. while the page is in the background): get a fresh one.
+    function watchTrack(s) {
+      const track = s.getAudioTracks()[0];
+      if (track) track.onended = () => { if (stream === s && micOn) reacquire(); };
+    }
+    async function reacquire() {
+      if (switching || !ctx) return;
+      switching = true;
+      try {
+        const fresh = await navigator.mediaDevices.getUserMedia({ audio: mode === "processed" ? MIC_MODES.processed : MIC_MODES.raw });
+        if (!ctx) { fresh.getTracks().forEach((t) => t.stop()); return; } // mic was turned off meanwhile
+        source?.disconnect();
+        stream?.getTracks().forEach((t) => t.stop());
+        stream = fresh;
+        watchTrack(fresh);
+        source = ctx.createMediaStreamSource(fresh);
+        source.connect(workletNode);
+        source.connect(analyser);
+        silentFrames = 0;
+        if (noSound) { noSound = false; if (state === "armed") setState("armed"); }
+      } catch (err) {
+        console.warn("Couldn't restart the mic", err); // retried when the page is next in front
+      } finally {
+        switching = false;
+      }
+    }
+    document.addEventListener("visibilitychange", () => {
+      const track = stream?.getAudioTracks()[0];
+      if (!document.hidden && micOn && track && track.readyState === "ended") reacquire();
+    });
+
     async function useRawMic() {
       switching = true;
       try {
@@ -503,6 +534,7 @@
         source?.disconnect();
         stream?.getTracks().forEach((t) => t.stop());
         stream = raw;
+        watchTrack(raw);
         source = ctx.createMediaStreamSource(raw);
         source.connect(workletNode);
         source.connect(analyser);
@@ -614,6 +646,7 @@
         checked = false;
         noSound = false;
         stream = await navigator.mediaDevices.getUserMedia({ audio: MIC_MODES.processed });
+        watchTrack(stream);
         await buildAudio();
         openSocket();
         statsTimer = setInterval(sendStats, 3000);
