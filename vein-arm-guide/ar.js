@@ -25,7 +25,8 @@ function setUp() { // load the 3D parts and build the scene once
     // Read-only status, handy for checking AR from the browser console.
     state.ar = {
       presenting: stage.presenting,
-      armPosition: () => arm.group.position.toArray().map((v) => +v.toFixed(3)),
+      armPosition: () => arm.group.getWorldPosition(new kit.THREE.Vector3()).toArray().map((v) => +v.toFixed(3)),
+      armHeld: () => arm.group.parent !== stage.scene,
       region: arm.site,
       highlight: () => +arm.hit.material.opacity.toFixed(2), // grab frame brightness, 0-1
     };

@@ -262,8 +262,8 @@ function setUp() { // load the 3D parts and build the scene once
     // Read-only status, handy for checking AR from the browser console.
     app.ar = {
       presenting: stage.presenting,
-      chatPosition: () => chat.position.toArray().map((v) => +v.toFixed(3)),
-      armPosition: () => arm?.group.position.toArray().map((v) => +v.toFixed(3)),
+      chatPosition: () => chat.getWorldPosition(new THREE.Vector3()).toArray().map((v) => +v.toFixed(3)),
+      armPosition: () => arm?.group.getWorldPosition(new THREE.Vector3()).toArray().map((v) => +v.toFixed(3)),
       region: () => arm?.site() ?? null,
     };
     return stage;

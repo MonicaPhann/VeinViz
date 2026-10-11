@@ -165,6 +165,7 @@ export function createStage({ preview = false } = {}) {
   }
   function selectStart(event) {
     const controller = event.target;
+    release(controller); // in case a previous pinch never reported its end
     const { button, grab } = pick(controller);
     if (button) {
       button.press();
@@ -173,20 +174,26 @@ export function createStage({ preview = false } = {}) {
       controller.userData.holding = grab;
     }
   }
-  function selectEnd(event) {
-    const controller = event.target;
+  // Let go of whatever this hand or controller holds: it stays where it is, facing you.
+  function release(controller) {
     const held = controller.userData.holding;
     if (!held) return;
     scene.attach(held.group);
     controller.userData.holding = null;
     faceViewer(held.group);
   }
+  const selectEnd = (event) => release(event.target);
   const controllers = [0, 1].map((i) => {
     const controller = renderer.xr.getController(i);
     controller.addEventListener("selectstart", selectStart);
     controller.addEventListener("selectend", selectEnd);
     controller.addEventListener("connected", () => { controller.userData.connected = true; });
-    controller.addEventListener("disconnected", () => { controller.userData.connected = false; });
+    controller.addEventListener("disconnected", () => {
+      // A hand that loses tracking never sends "pinch ended": drop what it held instead of
+      // leaving it stuck to a hand that's gone.
+      release(controller);
+      controller.userData.connected = false;
+    });
     scene.add(controller);
     return controller;
   });
@@ -228,7 +235,10 @@ export function createStage({ preview = false } = {}) {
     frames = 0;
     await renderer.xr.setSession(session);
     renderer.setAnimationLoop(frame);
-    session.addEventListener("end", () => renderer.setAnimationLoop(null));
+    session.addEventListener("end", () => {
+      controllers.forEach(release);
+      renderer.setAnimationLoop(null);
+    });
   }
 
   if (preview) { // desktop check: the same scene on a dark backdrop, standing in front of it
