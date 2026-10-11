@@ -68,11 +68,20 @@ body {
   line-height: 1.6;
   color: var(--fg);
   background: var(--bg);
-  display: grid;
-  grid-template-rows: auto 1fr auto;
   height: 100dvh;
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
+/* The layout lives in its own container, with each part pinned to its row, so elements that
+   browser extensions insert into <body> can't push the top bar into the stretching row. */
+.app {
+  position: fixed; inset: 0; /* pinned to the window, so nothing outside it can move it */
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.app > .topbar { grid-row: 1; }
+.app > .chat { grid-row: 2; }
+.app > .dock { grid-row: 3; }
 svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
