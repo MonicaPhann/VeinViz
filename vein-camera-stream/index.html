@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VeinVision</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #feed { position: fixed; inset: 0; width: 100vw; height: 100vh; object-fit: contain; }
+</style>
+</head>
+<body>
+<img id="feed" alt="">
+<script>
+  // live stream; reconnects if the server restarts
+  const feed = document.getElementById("feed");
+  function connect() { feed.src = "/stream?t=" + Date.now(); }
+  feed.onerror = () => setTimeout(connect, 1000);
+  connect();
+</script>
+</body>
+</html>
