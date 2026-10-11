@@ -41,9 +41,12 @@ Other devices on this network: http://192.168.1.143:8080
 | Camera stream | `http://<computer-ip>:8000` |
 | Vein Assist | `http://<computer-ip>:8080` |
 | Arm page | `http://<computer-ip>:8081` |
+| Vein Assist over https (mic on any device, and AR on the Quest: chat + mic + arm) | `https://<computer-ip>:8443` |
+| Arm in AR on the Quest (passthrough) | `https://<computer-ip>:8443/arm/` |
 
 Find the IP with `ipconfig getifaddr en0` (Mac) or `ipconfig` and the "IPv4 Address" (Windows). On Windows, click
 **Allow** when the firewall asks about Python. Tip: reserve the computer's IP in your router so the links don't change.
 
-Browsers only allow the microphone on `localhost` or https. Over these http links, other devices can follow the
-chat and the arm page live, but questions are asked on the computer running Vein Assist.
+Browsers only allow the microphone (and the Quest only allows AR) on `localhost` or https. Use the https links for
+that: the first time on each device, tap **Advanced → Proceed** past the "not private" warning. Over the plain
+http links, other devices can follow the chat and the arm page, but can't use the mic.
