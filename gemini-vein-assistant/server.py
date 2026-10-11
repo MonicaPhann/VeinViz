@@ -102,6 +102,14 @@ client = genai.Client(api_key=API_KEY) if API_KEY else None
 app = FastAPI(title="Gemini Vein Assist", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
+
+@app.middleware("http")
+async def no_cache(request, call_next):
+    # Make browsers check for updated page files on every load, so changes show up without a hard refresh.
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
 # ---- session state (in memory: restarting the server starts a fresh session) ----
 messages: list[dict] = []
 sockets: set[WebSocket] = set()
