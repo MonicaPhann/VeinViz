@@ -97,23 +97,31 @@ class Source:
         self.frame = None
         threading.Thread(target=self._loop, daemon=True).start()
 
+    def _say(self, text):  # print a status line only when it changes (the search repeats every few seconds)
+        if text != getattr(self, "_last_note", None):
+            print(text, flush=True)
+            self._last_note = text
+
     def _locate(self):
-        """If the camera isn't at its saved address, find it on this network."""
+        """Make sure the camera answers; if it isn't at its saved address, find it on this network."""
         parts = urlsplit(self.src)
         host, port = parts.hostname, parts.port or 554
         if not host or port_open(host, port):
-            return
-        print(f"[camera] {host} isn't answering; looking for the camera on this network...", flush=True)
+            return True
+        if not getattr(self, "_last_note", "").startswith("[camera] no camera streaming"):  # say it once per search
+            self._say(f"[camera] {host} isn't answering; looking for the camera on this network...")
         found = find_camera(port)
         if found:
             self.src = with_host(self.src, found)
-            print(f"[camera] found a camera at {found}, using it", flush=True)
-        else:
-            print("[camera] no camera found on this network yet (is it on the same Wi-Fi or hotspot?)", flush=True)
+            self._say(f"[camera] found a camera at {found}, using it")
+            return True
+        self._say("[camera] no camera streaming on this network yet: check it's on the same Wi-Fi/hotspot, "
+                  "Privacy Mode is off and its Camera Account is set (Tapo app). Still looking...")
+        return False
 
     def _open(self):
-        if self.src.startswith("rtsp"):
-            self._locate()
+        if self.src.startswith("rtsp") and not self._locate():
+            return None  # nothing to connect to yet: look again shortly instead of waiting for a timeout
         s = int(self.src) if self.src.isdigit() else self.src
         cap = cv2.VideoCapture(s, cv2.CAP_FFMPEG) if str(s).startswith("rtsp") else cv2.VideoCapture(s)
         return cap if cap.isOpened() else None
@@ -127,10 +135,11 @@ class Source:
         while True:
             cap = self._open()
             if cap is None:
-                print(f"[camera] can't open {safe(self.src)}, retrying in 2 s", flush=True)
+                if not self.src.startswith("rtsp") or getattr(self, "_last_note", "").startswith("[camera] found"):
+                    self._say(f"[camera] can't open {safe(self.src)}, retrying in 2 s")
                 time.sleep(2)
                 continue
-            print("[camera] connected", flush=True)
+            self._say(f"[camera] connected to {safe(self.src)}")
             fps = cap.get(cv2.CAP_PROP_FPS) or 15
             fails = 0
             while True:
@@ -141,7 +150,7 @@ class Source:
                         continue
                     fails += 1
                     if fails > 30:                                   # stream dropped -> reconnect
-                        print("[camera] stream lost, reconnecting", flush=True)
+                        self._say("[camera] stream lost, reconnecting")
                         break
                     time.sleep(0.05)
                     continue
