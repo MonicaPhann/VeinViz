@@ -643,15 +643,20 @@ def ensure_certificate(ip: str | None) -> tuple[Path, Path]:
     cert_path, key_path = CERT_DIR / "cert.pem", CERT_DIR / "key.pem"
     ips = {"127.0.0.1"} | ({ip} if ip else set())
     now = datetime.datetime.now(datetime.timezone.utc)
+    earlier: list[str] = []
     if cert_path.exists() and key_path.exists():
         try:
             cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
             san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
-            covered = {str(a) for a in san.get_values_for_type(x509.IPAddress)}
-            if ips <= covered and cert.not_valid_after_utc > now + datetime.timedelta(days=30):
+            covered = [str(a) for a in san.get_values_for_type(x509.IPAddress)]
+            if ips <= set(covered) and cert.not_valid_after_utc > now + datetime.timedelta(days=30):
                 return cert_path, key_path
+            earlier = [a for a in covered if a not in ips]
         except Exception:
             pass  # unreadable or old: make a new one
+    # Keep covering recent addresses too, so switching back to a network (e.g. home Wi-Fi <-> hotspot)
+    # doesn't make the headset accept a new certificate again.
+    ips |= set(earlier[-6:])
 
     host = socket.gethostname()
     names = {"localhost", host, host.split(".")[0] + ".local"}
