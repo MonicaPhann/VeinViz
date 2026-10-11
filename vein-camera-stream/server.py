@@ -111,7 +111,7 @@ class Source:
         host, port = parts.hostname, parts.port or 554
         if not host or port_open(host, port):
             return True
-        if not getattr(self, "_last_note", "").startswith("[camera] no camera streaming"):  # say it once per search
+        if not getattr(self, "_last_note", "").startswith(("[camera] no camera streaming", "[camera] this computer is on a shared")):  # once per search
             self._say(f"[camera] {host} isn't answering; looking for the camera on this network...")
         found = find_camera(port)
         if found:
