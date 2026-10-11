@@ -71,6 +71,41 @@ Any device on the same network can open `http://<this-computer's-IP>:8080` to fo
 The server prints this link when it starts (`Other devices on this network: http://…:8080`).
 Browsers only allow the mic on `localhost` or HTTPS, so those other screens are view-only.
 
+## HTTPS: the mic on other devices, and AR on the Quest
+
+Browsers only allow the microphone, and the Quest only allows AR, on `localhost` or https. So the server also
+runs an https address, using a certificate it makes for itself (saved in `certs/`, which is never committed).
+It prints the links when it starts:
+
+```
+One link for everything (mic on any device; on the Quest, View in AR shows the chat, mic and arm):
+  https://192.168.1.143:8443   (first visit on each device: tap Advanced -> Proceed)
+  Arm only: https://192.168.1.143:8443/arm/
+```
+
+The first time each device opens the https link, the browser warns that the connection isn't private, because
+the certificate isn't from a public authority. Tap **Advanced → Proceed** (Chrome/Edge/Quest) or
+**Show Details → visit this website** (Safari). After that, the mic works on that device. The plain http links
+keep working as before.
+
+## AR on the Meta Quest (passthrough)
+
+Vein Assist can float in your real room: the chat as a glass panel, the mic orb under it, and the arm
+hologram beside it, lighting up the recommended region. (The Quest runs one AR page at a time, so the arm is
+included here; the arm page's own AR view is still there if you only want the arm.)
+
+1. On the Quest, open the **HTTPS** link Vein Assist prints, e.g. `https://192.168.1.143:8443`.
+   The first time, tap **Advanced → Proceed**.
+2. Tap the mic once and allow microphone access (easier to answer the permission prompt before AR).
+3. Tap **View in AR** (top right).
+4. **Pinch the orb** to turn the mic on or off. Point at the chat panel or the arm and **pinch to move it**.
+   Press the Meta button to leave AR.
+
+The orb shows the same states as the page: still when off or waiting for "Gemini", ripples while you're
+talking to it, a spinning arc while it thinks, and bars while it speaks. Answers stream onto the panel as
+they're written. The AR view needs the `vein-arm-guide` folder next to this one (it uses its 3D code), and
+loads three.js from the internet. To check it on a computer, add `?ar-preview` to the address.
+
 ## Config (`.env`)
 
 | Variable | Default |
@@ -80,6 +115,7 @@ Browsers only allow the mic on `localhost` or HTTPS, so those other screens are 
 | `WHISPER_MODEL` | `auto`: tests this computer at startup and picks `small.en`, `base.en` or `tiny.en` (most to least accurate) |
 | `CAMERA_STREAM_URL` | `http://192.168.1.143:8000/stream` |
 | `PORT` | `8080` |
+| `HTTPS_PORT` | `8443` (`off` to turn HTTPS off) |
 
 If your camera runs at a different address, change `CAMERA_STREAM_URL`.
 The chat lives in memory only. Restarting the server starts a fresh session.

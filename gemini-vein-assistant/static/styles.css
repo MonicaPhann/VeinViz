@@ -378,3 +378,29 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
   border-color: #fff;
 }
 :root[data-theme="aero"] .status { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }
+
+/* ---------- AR (Meta Quest passthrough) ---------- */
+.ar-btn {
+  height: 2.5rem; padding: 0 0.875rem 0 0.625rem; display: inline-flex; align-items: center; gap: 0.5rem;
+  border-radius: 0.625rem; border: 1px solid var(--border); background: var(--surface); color: var(--fg);
+  font: 600 0.875rem var(--font); cursor: pointer; transition: border-color 160ms;
+}
+.ar-btn[hidden] { display: none; }
+.ar-btn:hover { border-color: var(--muted); }
+.ar-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.ar-btn svg { width: 1.125rem; height: 1.125rem; }
+:root[data-theme="aero"] .ar-btn {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.6) 50%, rgba(214, 240, 255, 0.75) 51%, rgba(255, 255, 255, 0.85) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0.125rem 0.5rem rgba(14, 80, 130, 0.2);
+}
+.ar-hint {
+  position: fixed; left: 50%; top: 4.75rem; transform: translateX(-50%); z-index: 2; margin: 0;
+  max-width: calc(100% - 2rem); padding: 0.5rem 0.875rem; border-radius: 0.625rem; text-align: center;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: 0.875rem;
+}
+.ar-hint[hidden] { display: none; }
+.ar-canvas { position: fixed; inset: 0; display: none; pointer-events: none; } /* never blocks taps on the page */
+.ar-preview body { background: #1d232b; }
+.ar-preview .app { display: none; }
+.ar-preview .ar-canvas { display: block; }

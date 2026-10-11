@@ -23,6 +23,9 @@
   let myReplyId = null;         // assistant message this device should speak
   let awaitingReply = false;
   const items = new Map();      // id -> { data, el, body }
+  let region = null;            // latest recommended region ({ site, label, reason })
+  const watchers = new Set();   // the AR view redraws when anything here changes
+  const changed = () => watchers.forEach((fn) => fn());
 
   const STATUS = {
     off: "Mic off · tap to start",
@@ -39,6 +42,7 @@
     mic.setAttribute("aria-label", micOn ? "Turn microphone off" : "Turn microphone on");
     statusEl.textContent = note || STATUS[next];
     if (next !== "addressed") caption.textContent = "";
+    changed();
   }
 
   function idleState() { return micOn ? "armed" : "off"; }
@@ -142,11 +146,12 @@
       conn.textContent = "Reconnecting…"; conn.dataset.ok = "false";
       setTimeout(connect, 1500);
     };
-    ws.onmessage = (e) => onEvent(JSON.parse(e.data));
+    ws.onmessage = (e) => { onEvent(JSON.parse(e.data)); changed(); };
   }
 
   function onEvent(ev) {
     if (ev.type === "snapshot") {
+      region = ev.region || null;
       items.clear();
       thread.querySelectorAll(".msg").forEach((n) => n.remove());
       empty.hidden = ev.messages.length > 0;
@@ -168,6 +173,8 @@
       it.data.text += ev.text;
       withScroll(() => renderBody(it));
       if (ev.id === myReplyId) tts.feed(ev.text);
+    } else if (ev.type === "region") {
+      region = ev.region;
     } else if (ev.type === "done") {
       const it = items.get(ev.id);
       if (!it) return;
@@ -307,6 +314,7 @@
     becomeAddressed();
     const live = afterWake(text) ?? text;
     caption.textContent = `${buffer} ${live}`.replace(/\s+/g, " ").trim();
+    changed();
   }
 
   function onFinal(text) {
@@ -320,6 +328,7 @@
       buffer += " " + (rest !== null ? rest : text);
     }
     caption.textContent = buffer.replace(/\s+/g, " ").trim();
+    changed();
     maybeSubmit();
   }
 
@@ -496,6 +505,17 @@
   });
   systemDark.addEventListener("change", syncThemeButton);
   syncThemeButton();
+
+  // ---------------- for the AR view (ar.js) ----------------
+  window.veinAssist = {
+    state: () => state,
+    status: () => statusEl.textContent,
+    caption: () => caption.textContent,
+    messages: () => [...items.values()].map((it) => it.data),
+    region: () => region,
+    toggleMic: () => toggleMic(),
+    onChange: (fn) => watchers.add(fn),
+  };
 
   // ---------------- wiring ----------------
   mic.addEventListener("click", toggleMic);

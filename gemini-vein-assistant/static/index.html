@@ -24,6 +24,10 @@
     </div>
     <div class="top-actions">
       <span class="conn" id="conn" role="status">Connecting…</span>
+      <button class="ar-btn" id="ar-btn" type="button" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
+        View in AR
+      </button>
       <button class="theme-btn" id="theme" type="button" aria-label="Switch to light mode">
         <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
         <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
@@ -64,6 +68,9 @@
   </footer>
   </div>
 
+  <p class="ar-hint" id="ar-hint" role="status" hidden></p>
+
   <script src="/static/app.js"></script>
+  <script type="module" src="/static/ar.js"></script>
 </body>
 </html>
