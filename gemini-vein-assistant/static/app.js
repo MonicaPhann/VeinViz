@@ -431,6 +431,9 @@
     };
     const SILENT_FRAMES = 150; // 3 s of 20 ms frames
     let mode = "processed", silentFrames = 0, source = null, workletNode = null, switching = false, noSound = false;
+    // heard: this mode has delivered real sound, so later silence means the mic was paused (e.g. the
+    // page went to the background), not that the mode is broken. revived: we already re-opened it once.
+    let heard = false, revived = false;
     let analyser = null, analyserBuf = null, checked = false;
 
     // Build (or rebuild) the audio engine around the current mic stream.
@@ -523,7 +526,8 @@
     }
     document.addEventListener("visibilitychange", () => {
       const track = stream?.getAudioTracks()[0];
-      if (!document.hidden && micOn && track && track.readyState === "ended") reacquire();
+      if (document.hidden || !micOn || !track) return;
+      if (track.readyState === "ended" || silentFrames >= SILENT_FRAMES) { revived = false; reacquire(); }
     });
 
     async function useRawMic() {
@@ -578,9 +582,11 @@
     function onFrame({ pcm, rms }) {
       // A real mic always picks up some noise; exact zeros for 3 s means it isn't delivering sound.
       silentFrames = rms === 0 ? silentFrames + 1 : 0;
+      if (rms > 0) { heard = true; revived = false; }
       if (silentFrames === SILENT_FRAMES && !switching) {
-        if (mode === "processed") useRawMic();
-        else if (mode === "raw") useMicRate();
+        if (heard && !revived) { revived = true; reacquire(); } // worked before: just re-open the mic
+        else if (!heard && mode === "processed") useRawMic();
+        else if (!heard && mode === "raw") useMicRate();
         else if (micOn) {
           noSound = true;
           setState("armed", "No sound from the mic · check it isn't muted on this device");
@@ -643,6 +649,7 @@
       async start() {
         mode = "processed";
         silentFrames = 0;
+        heard = false; revived = false;
         checked = false;
         noSound = false;
         stream = await navigator.mediaDevices.getUserMedia({ audio: MIC_MODES.processed });
