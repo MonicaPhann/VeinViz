@@ -38,7 +38,8 @@ WHISPER_THREADS = min(os.cpu_count() or 4, 8)
 # Spoken answers: a Piper voice, downloaded once into voices/ (about 60 MB).
 TTS_VOICE = os.getenv("TTS_VOICE", "en_US-lessac-medium").strip()
 VOICES_DIR = BASE_DIR / "voices"
-CAMERA_URL = os.getenv("CAMERA_STREAM_URL", "http://192.168.1.143:8000/stream").strip()
+# The camera stream usually runs on this same computer, so 127.0.0.1 works on any network.
+CAMERA_URL = os.getenv("CAMERA_STREAM_URL", "http://127.0.0.1:8000/stream").strip()
 HISTORY_TURNS = int(os.getenv("HISTORY_TURNS", "20"))
 # HTTPS lets other devices use the mic and the Quest use AR. Set HTTPS_PORT=off to disable.
 HTTPS_PORT = os.getenv("HTTPS_PORT", "8443").strip().lower()

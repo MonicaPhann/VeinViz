@@ -10,10 +10,14 @@ Run:
 Open:  http://localhost:8000   (or http://<laptop-ip>:8000 from another device on the same network)
 """
 import argparse
+import ipaddress
 import logging
 import os
+import socket
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlsplit, urlunsplit
 
 os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
 os.environ.setdefault("FLASK_SKIP_DOTENV", "1")                    # we read .env ourselves
@@ -37,6 +41,52 @@ def load_env(path):
                 os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
+# ---------------------------------------------------------------- finding the camera
+# On a new network (e.g. a phone hotspot) the camera gets a new IP. If the saved address doesn't
+# answer, look for the camera (a device with the RTSP port open) on this computer's network.
+def safe(src):
+    """The source for logs, without the camera password."""
+    return "rtsp://" + src.split("@", 1)[1] if src.startswith("rtsp://") and "@" in src else src
+
+
+def port_open(host, port, timeout=1.0):
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def local_ip():
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))  # picks the network interface; nothing is sent
+            return s.getsockname()[0]
+    except OSError:
+        return None
+
+
+def find_camera(port):
+    """IP of a device on this computer's network with the RTSP port open, or None."""
+    me = local_ip()
+    if not me:
+        return None
+    hosts = [str(h) for h in ipaddress.ip_network(f"{me}/24", strict=False).hosts() if str(h) != me]
+    with ThreadPoolExecutor(max_workers=64) as pool:
+        for host, ok in zip(hosts, pool.map(lambda h: port_open(h, port, 0.5), hosts)):
+            if ok:
+                return host
+    return None
+
+
+def with_host(src, host):
+    """The same rtsp:// address (same login, port and path) pointing at another host."""
+    parts = urlsplit(src)
+    login = parts.netloc.rpartition("@")[0]
+    netloc = (login + "@" if login else "") + host + (f":{parts.port}" if parts.port else "")
+    return urlunsplit(parts._replace(netloc=netloc))
+
+
 # ---------------------------------------------------------------- camera input
 class Source:
     """Always holds the newest frame (no lag build-up). RTSP, webcam index, video file or photo."""
@@ -47,7 +97,23 @@ class Source:
         self.frame = None
         threading.Thread(target=self._loop, daemon=True).start()
 
+    def _locate(self):
+        """If the camera isn't at its saved address, find it on this network."""
+        parts = urlsplit(self.src)
+        host, port = parts.hostname, parts.port or 554
+        if not host or port_open(host, port):
+            return
+        print(f"[camera] {host} isn't answering; looking for the camera on this network...", flush=True)
+        found = find_camera(port)
+        if found:
+            self.src = with_host(self.src, found)
+            print(f"[camera] found a camera at {found}, using it", flush=True)
+        else:
+            print("[camera] no camera found on this network yet (is it on the same Wi-Fi or hotspot?)", flush=True)
+
     def _open(self):
+        if self.src.startswith("rtsp"):
+            self._locate()
         s = int(self.src) if self.src.isdigit() else self.src
         cap = cv2.VideoCapture(s, cv2.CAP_FFMPEG) if str(s).startswith("rtsp") else cv2.VideoCapture(s)
         return cap if cap.isOpened() else None
@@ -61,7 +127,7 @@ class Source:
         while True:
             cap = self._open()
             if cap is None:
-                print(f"[camera] can't open {self.src}, retrying in 2 s", flush=True)
+                print(f"[camera] can't open {safe(self.src)}, retrying in 2 s", flush=True)
                 time.sleep(2)
                 continue
             print("[camera] connected", flush=True)

@@ -10,7 +10,7 @@ Each question also sends Gemini the current frame from the infrared vein camera.
   Get it from https://www.python.org/downloads/. On Windows, tick **"Add python.exe to PATH"** in the installer.
 - **A Gemini API key** from https://aistudio.google.com/apikey
 - **Chrome, Edge or Firefox** for the page. The browser asks for microphone access once.
-- Optional: the VeinViz infrared camera stream on the same network (default `http://192.168.1.143:8000/stream`).
+- Optional: the VeinViz infrared camera stream on the same network (default `http://127.0.0.1:8000/stream`, the camera stream on this computer).
   Without it, the assistant still works and says the camera frame is unavailable.
 
 Works on Windows 10/11 (64-bit), macOS 13+ (Apple Silicon or Intel) and Linux.
@@ -125,7 +125,7 @@ loads three.js from the internet. To check it on a computer, add `?ar-preview` t
 | `GEMINI_API_KEY` | (required) |
 | `GEMINI_MODEL` | `gemini-flash-lite-latest` (about 1.5s per answer; `gemini-flash-latest` took 80s+ on this key) |
 | `WHISPER_MODEL` | `auto`: tests this computer at startup and picks `small.en`, `base.en` or `tiny.en` (most to least accurate) |
-| `CAMERA_STREAM_URL` | `http://192.168.1.143:8000/stream` |
+| `CAMERA_STREAM_URL` | `http://127.0.0.1:8000/stream` (the camera stream on this computer, works on any network) |
 | `PORT` | `8080` |
 | `HTTPS_PORT` | `8443` (`off` to turn HTTPS off) |
 | `TTS_VOICE` | `en_US-lessac-medium`: the Piper voice that reads answers aloud (any voice from huggingface.co/rhasspy/piper-voices) |
