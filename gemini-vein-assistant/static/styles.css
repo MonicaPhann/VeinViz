@@ -1,0 +1,364 @@
+/* ---------- tokens ---------- */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #0f172a;
+  --muted: #526071;
+  --border: #e3e8ef;
+  --user-bubble: #eef1f5;
+
+  --accent: #0f766e;          /* listening — clinical teal */
+  --accent-soft: rgba(15, 118, 110, 0.14);
+  --think: #4f46e5;           /* generating — indigo */
+  --speak: #1d4ed8;           /* speaking — blue */
+  --off: #64748b;
+  --danger: #b42318;
+
+  --mic-size: 96px;
+  --radius: 16px;
+  --font: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="aero"]) {
+    --bg: #0b0f14;
+    --surface: #121821;
+    --fg: #e6edf3;
+    --muted: #9aa8b8;
+    --border: #1f2a37;
+    --user-bubble: #19212c;
+    --accent: #2dd4bf;
+    --accent-soft: rgba(45, 212, 191, 0.16);
+    --think: #a5b4fc;
+    --speak: #7cb3ff;
+    --off: #8a97a8;
+    --danger: #f97066;
+    color-scheme: dark;
+  }
+}
+
+/* chosen with the theme button (overrides the system setting) */
+:root[data-theme="dark"] {
+  --bg: #0b0f14;
+  --surface: #121821;
+  --fg: #e6edf3;
+  --muted: #9aa8b8;
+  --border: #1f2a37;
+  --user-bubble: #19212c;
+  --accent: #2dd4bf;
+  --accent-soft: rgba(45, 212, 191, 0.16);
+  --think: #a5b4fc;
+  --speak: #7cb3ff;
+  --off: #8a97a8;
+  --danger: #f97066;
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--fg);
+  background: var(--bg);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+}
+svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- top bar ---------- */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px max(16px, calc((100% - 760px) / 2));
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand h1 { font-size: 17px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+.brand-mark {
+  width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent);
+}
+.brand-mark svg { width: 16px; height: 16px; }
+.top-actions { display: flex; align-items: center; gap: 12px; }
+.theme-btn {
+  width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+  border: 1px solid var(--border); background: var(--surface); color: var(--fg); cursor: pointer;
+  transition: background-color 160ms, border-color 160ms;
+}
+.theme-btn:hover { border-color: var(--muted); }
+.theme-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.theme-btn svg { width: 18px; height: 18px; grid-area: 1 / 1; }
+/* the icon shows the theme you'll switch to next: light -> dark -> aero */
+.theme-btn svg { display: none; }
+:root[data-mode="light"] .theme-btn .moon,
+:root[data-mode="dark"] .theme-btn .drop,
+:root[data-mode="aero"] .theme-btn .sun { display: block; }
+.conn { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.conn::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--off); }
+.conn[data-ok="true"]::before { background: var(--accent); }
+
+/* ---------- chat ---------- */
+.chat { overflow-y: auto; overscroll-behavior: contain; scroll-behavior: smooth; outline: none; }
+.chat-inner {
+  max-width: 760px; margin: 0 auto;
+  padding: 28px 16px 24px;
+  display: flex; flex-direction: column; gap: 22px;
+}
+
+.empty { margin: 12vh auto 0; text-align: center; max-width: 420px; }
+.empty-title { font-size: 20px; font-weight: 600; margin: 0 0 6px; }
+.empty-sub { color: var(--muted); margin: 0; }
+
+.msg { display: flex; flex-direction: column; gap: 4px; animation: enter 260ms var(--ease-out) both; }
+.msg-meta { font-size: 12.5px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.msg-body { overflow-wrap: anywhere; }
+.msg-body p { margin: 0 0 8px; }
+.msg-body p:last-child { margin-bottom: 0; }
+.msg-body ul, .msg-body ol { margin: 4px 0 8px; padding-left: 22px; }
+.msg-body li { margin: 2px 0; }
+
+.msg.user { align-items: flex-end; }
+.msg.user .msg-body {
+  background: var(--user-bubble); padding: 10px 14px; border-radius: var(--radius) var(--radius) 4px var(--radius);
+  max-width: 85%;
+}
+
+.msg.assistant { flex-direction: row; gap: 12px; align-items: flex-start; }
+.avatar {
+  flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid var(--border); background: var(--surface); color: var(--accent); margin-top: 2px;
+}
+.avatar svg { width: 15px; height: 15px; }
+.msg.assistant .stack { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.msg.assistant .msg-body { font-size: 17px; line-height: 1.65; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted);
+}
+.chip svg { width: 12px; height: 12px; }
+.err { color: var(--danger); font-size: 14px; }
+
+/* streaming caret + waiting dots */
+.caret { display: inline-block; width: 8px; height: 1.05em; margin-left: 2px; vertical-align: -0.15em;
+  background: var(--think); border-radius: 2px; animation: blink 1s steps(1) infinite; }
+.dots { display: inline-flex; gap: 5px; padding: 8px 0; }
+.dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--think); opacity: .35; animation: dot 1.2s infinite; }
+.dots i:nth-child(2) { animation-delay: .15s; }
+.dots i:nth-child(3) { animation-delay: .3s; }
+
+.jump {
+  position: fixed; left: 50%; bottom: calc(var(--mic-size) + 96px); transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font: 500 14px var(--font); color: var(--fg); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px; min-height: 40px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
+}
+.jump svg { width: 16px; height: 16px; }
+.jump[hidden] { display: none; }
+
+/* ---------- mic dock ---------- */
+.dock {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 14px 16px max(20px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border); background: var(--bg);
+}
+.caption {
+  min-height: 1.5em; max-width: 640px; text-align: center; font-size: 15px; color: var(--muted);
+  font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%;
+}
+.status { margin: 0; font-size: 14px; font-weight: 500; color: var(--muted); min-height: 1.4em; }
+
+.mic {
+  --c: var(--off);
+  position: relative; width: var(--mic-size); height: var(--mic-size); border-radius: 50%;
+  border: 0; padding: 0; cursor: pointer; background: transparent; color: var(--c);
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  transition: transform 160ms var(--ease-out);
+}
+.mic:active { transform: scale(0.96); }
+.mic:focus-visible { outline: 3px solid var(--accent); outline-offset: 6px; }
+
+.mic-core {
+  position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center;
+  background: var(--surface); border: 2px solid var(--border);
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.10);
+  transition: background-color 220ms var(--ease-out), border-color 220ms var(--ease-out), color 220ms;
+  z-index: 1;
+}
+.ico { width: 36px; height: 36px; grid-area: 1 / 1; opacity: 0; transition: opacity 160ms; }
+.bars { grid-area: 1 / 1; display: flex; gap: 5px; align-items: center; height: 36px; opacity: 0; transition: opacity 160ms; }
+.bars i { width: 5px; height: 100%; border-radius: 3px; background: currentColor; transform: scaleY(.3); }
+
+.ring, .spinner { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; opacity: 0; }
+.ring { border: 2px solid var(--c); }
+.spinner {
+  inset: -6px;
+  background: conic-gradient(from 0deg, transparent 0 55%, var(--c) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+}
+
+/* off */
+.mic[data-state="off"] .ico-off { opacity: 1; }
+
+/* on, waiting for wake word — static */
+.mic[data-state="armed"] { --c: var(--accent); }
+.mic[data-state="armed"] .mic-core { border-color: var(--c); background: var(--accent-soft); }
+.mic[data-state="armed"] .ico-on { opacity: 1; }
+
+/* being talked to — rings ripple outward */
+.mic[data-state="addressed"] { --c: var(--accent); }
+.mic[data-state="addressed"] .mic-core { border-color: var(--c); background: var(--c); color: var(--surface); }
+.mic[data-state="addressed"] .ico-on { opacity: 1; }
+.mic[data-state="addressed"] .ring { animation: ripple 1.6s var(--ease-out) infinite; }
+.mic[data-state="addressed"] .ring-2 { animation-delay: .8s; }
+
+/* generating — rotating arc */
+.mic[data-state="generating"] { --c: var(--think); }
+.mic[data-state="generating"] .mic-core { border-color: transparent; }
+.mic[data-state="generating"] .ico-think { opacity: 1; animation: twinkle 1.6s ease-in-out infinite; }
+.mic[data-state="generating"] .spinner { opacity: 1; animation: spin 1s linear infinite; }
+
+/* speaking — equalizer bars + soft breathing halo */
+.mic[data-state="speaking"] { --c: var(--speak); }
+.mic[data-state="speaking"] .mic-core { border-color: var(--c); }
+.mic[data-state="speaking"] .bars { opacity: 1; }
+.mic[data-state="speaking"] .bars i { animation: eq 0.9s ease-in-out infinite; }
+.mic[data-state="speaking"] .bars i:nth-child(2) { animation-delay: -.6s; }
+.mic[data-state="speaking"] .bars i:nth-child(3) { animation-delay: -.3s; }
+.mic[data-state="speaking"] .bars i:nth-child(4) { animation-delay: -.75s; }
+.mic[data-state="speaking"] .bars i:nth-child(5) { animation-delay: -.45s; }
+.mic[data-state="speaking"] .ring-1 { opacity: .35; animation: breathe 1.8s ease-in-out infinite; }
+
+.mic[data-state="addressed"] + .status, .mic[data-state="armed"] + .status { color: var(--accent); }
+.mic[data-state="generating"] + .status { color: var(--think); }
+.mic[data-state="speaking"] + .status { color: var(--speak); }
+
+/* ---------- keyframes ---------- */
+@keyframes ripple { from { transform: scale(1); opacity: .55; } to { transform: scale(1.65); opacity: 0; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes twinkle { 50% { transform: scale(.86) rotate(12deg); } }
+@keyframes eq { 0%, 100% { transform: scaleY(.25); } 50% { transform: scaleY(1); } }
+@keyframes breathe { 50% { transform: scale(1.12); opacity: .1; } }
+@keyframes enter { from { opacity: 0; transform: translateY(6px); } }
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes dot { 30% { opacity: 1; transform: translateY(-3px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+  .chat { scroll-behavior: auto; }
+  /* keep each state distinguishable without motion */
+  .mic[data-state="addressed"] .ring-1 { opacity: .5; transform: scale(1.2); }
+  .mic[data-state="generating"] .spinner { opacity: 1; }
+  .mic[data-state="speaking"] .bars i:nth-child(odd) { transform: scaleY(.9); }
+  .mic[data-state="speaking"] .bars i:nth-child(even) { transform: scaleY(.5); }
+}
+
+@media (max-width: 480px) {
+  :root { --mic-size: 84px; }
+  .msg.assistant .msg-body { font-size: 16px; }
+}
+
+/* ================= Frutiger Aero =================
+   Sky-to-grass backdrop, soft bubbles, frosted glass and glossy highlights. */
+:root[data-theme="aero"] {
+  --bg: #e4f5ff;
+  --surface: rgba(255, 255, 255, 0.72);
+  --fg: #0b3550;
+  --muted: #2d5873;
+  --border: rgba(255, 255, 255, 0.8);
+  --user-bubble: linear-gradient(180deg, #f2fcff 0%, #c4ebfb 100%);
+  --accent: #047857;          /* listening — glossy green */
+  --accent-soft: rgba(16, 185, 129, 0.2);
+  --think: #4338ca;
+  --speak: #0369a1;
+  --off: #46677d;
+  --danger: #b42318;
+  --font: "Segoe UI", "Hind", "Figtree", system-ui, sans-serif;
+  --glass: rgba(255, 255, 255, 0.5);
+  --glass-shadow: 0 6px 24px rgba(14, 80, 130, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  color-scheme: light;
+}
+:root[data-theme="aero"] body {
+  background:
+    radial-gradient(circle at 12% 22%, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0) 7%),
+    radial-gradient(circle at 86% 14%, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0) 5%),
+    radial-gradient(circle at 78% 62%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 9%),
+    radial-gradient(circle at 22% 70%, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 6%),
+    radial-gradient(130% 45% at 50% 112%, #6fcf5f 0%, #a5e48f 38%, rgba(165, 228, 143, 0) 62%),
+    linear-gradient(180deg, #3fa9e8 0%, #8fd2f6 40%, #dff4ff 72%, #e9f9e1 100%);
+  background-attachment: fixed;
+}
+:root[data-theme="aero"] .topbar,
+:root[data-theme="aero"] .dock {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+          backdrop-filter: blur(16px) saturate(1.4);
+  border-color: rgba(255, 255, 255, 0.75);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+:root[data-theme="aero"] .brand-mark,
+:root[data-theme="aero"] .theme-btn,
+:root[data-theme="aero"] .jump {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.6) 50%, rgba(214, 240, 255, 0.75) 51%, rgba(255, 255, 255, 0.85) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 8px rgba(14, 80, 130, 0.2);
+}
+:root[data-theme="aero"] .msg.assistant .stack {
+  background: var(--surface);
+  -webkit-backdrop-filter: blur(12px);
+          backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: var(--radius);
+  padding: 10px 16px 12px;
+  box-shadow: var(--glass-shadow);
+}
+:root[data-theme="aero"] .msg.user .msg-body {
+  background: var(--user-bubble);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 3px 10px rgba(14, 80, 130, 0.14), inset 0 1px 0 #fff;
+}
+:root[data-theme="aero"] .avatar { background: linear-gradient(180deg, #ffffff, #c9eefc); border-color: #fff; }
+:root[data-theme="aero"] .empty { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7); }
+
+/* glossy orb mic */
+:root[data-theme="aero"] .mic-core {
+  background: radial-gradient(circle at 50% 78%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 55%),
+              linear-gradient(180deg, #f4fbff 0%, #b9e2f7 100%);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 8px 22px rgba(14, 80, 130, 0.28), inset 0 -6px 14px rgba(3, 105, 161, 0.18);
+}
+:root[data-theme="aero"] .mic-core::before {  /* specular highlight across the top */
+  content: ""; position: absolute; left: 16%; right: 16%; top: 5%; height: 44%;
+  border-radius: 50%; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0));
+}
+:root[data-theme="aero"] .mic[data-state="armed"] .mic-core {
+  background: radial-gradient(circle at 50% 80%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 55%),
+              linear-gradient(180deg, #f3fff6 0%, #b7f0c9 100%);
+  border-color: #fff;
+}
+:root[data-theme="aero"] .mic[data-state="addressed"] .mic-core {
+  background: radial-gradient(circle at 50% 85%, rgba(190, 255, 210, 0.9), rgba(190, 255, 210, 0) 50%),
+              linear-gradient(180deg, #4fd682 0%, #0f9a4b 100%);
+  color: #fff;
+}
+:root[data-theme="aero"] .mic[data-state="generating"] .mic-core {
+  background: radial-gradient(circle at 50% 80%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 55%),
+              linear-gradient(180deg, #f6f5ff 0%, #cdd2fb 100%);
+}
+:root[data-theme="aero"] .mic[data-state="speaking"] .mic-core {
+  background: radial-gradient(circle at 50% 80%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 55%),
+              linear-gradient(180deg, #f2faff 0%, #a9dcf7 100%);
+  border-color: #fff;
+}
+:root[data-theme="aero"] .status { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }

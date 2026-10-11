@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vein Assist</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Hind:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script>
+    // Apply a saved light/dark choice before the page paints, so it doesn't flash.
+    try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark" || t === "aero") document.documentElement.dataset.theme = t; } catch (_) {}
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.8 2.8M14.9 14.9l2.8 2.8M6.3 17.7l2.8-2.8M14.9 9.1l2.8-2.8"/></svg>
+      </span>
+      <h1>Vein Assist</h1>
+    </div>
+    <div class="top-actions">
+      <span class="conn" id="conn" role="status">Connecting…</span>
+      <button class="theme-btn" id="theme" type="button" aria-label="Switch to light mode">
+        <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
+        <svg class="drop" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="chat" id="chat" aria-label="Conversation" tabindex="-1">
+    <div class="chat-inner" id="thread">
+      <div class="empty" id="empty">
+        <p class="empty-title">Say <strong>“Gemini”</strong>, then your question.</p>
+        <p class="empty-sub">Turn the mic on below. Answers are spoken aloud and appear here as they’re written.</p>
+      </div>
+    </div>
+  </main>
+
+  <button class="jump" id="jump" type="button" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+    Latest
+  </button>
+
+  <footer class="dock">
+    <div class="caption" id="caption" aria-hidden="true"></div>
+    <button class="mic" id="mic" type="button" aria-pressed="false" aria-describedby="status" data-state="off">
+      <span class="ring ring-1" aria-hidden="true"></span>
+      <span class="ring ring-2" aria-hidden="true"></span>
+      <span class="spinner" aria-hidden="true"></span>
+      <span class="mic-core">
+        <svg class="ico ico-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 2l20 20M18.89 13.23A7 7 0 0 0 19 12v-2M5 10v2a7 7 0 0 0 12 5M15 9.34V5a3 3 0 0 0-5.68-1.33M9 9v3a3 3 0 0 0 5.12 2.12M12 19v3"/></svg>
+        <svg class="ico ico-on" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg>
+        <svg class="ico ico-think" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+        <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+      </span>
+      <span class="sr-only" id="mic-label">Microphone</span>
+    </button>
+    <p class="status" id="status" role="status">Mic off · tap to start</p>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
