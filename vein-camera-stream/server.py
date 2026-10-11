@@ -67,9 +67,12 @@ def local_ip():
 
 
 def find_camera(port):
-    """IP of a device on this computer's network with the RTSP port open, or None."""
+    """IP of a device on this computer's network with the RTSP port open, or None.
+
+    Only searches private networks (home Wi-Fi, phone hotspots): on a shared or public network,
+    scanning other people's devices isn't appropriate, so set the camera's address in .env instead."""
     me = local_ip()
-    if not me:
+    if not me or not ipaddress.ip_address(me).is_private:
         return None
     hosts = [str(h) for h in ipaddress.ip_network(f"{me}/24", strict=False).hosts() if str(h) != me]
     with ThreadPoolExecutor(max_workers=64) as pool:
@@ -115,8 +118,13 @@ class Source:
             self.src = with_host(self.src, found)
             self._say(f"[camera] found a camera at {found}, using it")
             return True
-        self._say("[camera] no camera streaming on this network yet: check it's on the same Wi-Fi/hotspot, "
-                  "Privacy Mode is off and its Camera Account is set (Tapo app). Still looking...")
+        me = local_ip()
+        if me and not ipaddress.ip_address(me).is_private:
+            self._say(f"[camera] this computer is on a shared network ({me}), so it won't search for the camera here. "
+                      "Join the same hotspot/Wi-Fi as the camera, or put the camera's address in .env. Still trying...")
+        else:
+            self._say("[camera] no camera streaming on this network yet: check it's on the same Wi-Fi/hotspot, "
+                      "Privacy Mode is off and its Camera Account is set (Tapo app). Still looking...")
         return False
 
     def _open(self):
