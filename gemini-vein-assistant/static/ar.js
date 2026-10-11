@@ -210,7 +210,7 @@ function setUp() { // load the 3D parts and build the scene once
     orbHit.position.set(orb.position.x, orb.position.y, -0.002);
     chat.add(panel, orb, panelHit, orbHit);
     stage.scene.add(chat);
-    stage.addButton(orbHit, () => app.toggleMic());
+    stage.addButton(orbHit, () => { app.resumeAudio(); app.toggleMic(); });
     stage.addGrabbable(chat, panelHit);
 
     // the arm, beside the chat (if the arm page is installed next to Vein Assist)
@@ -244,7 +244,7 @@ function setUp() { // load the 3D parts and build the scene once
         arm.setSite(site);
       }
     });
-    let lastOrbState = null;
+    let lastOrbKey = null;
     stage.onFrame((now) => {
       if (dirty && now - lastPanel > 80) {
         panel.material.map.redraw();
@@ -252,9 +252,10 @@ function setUp() { // load the 3D parts and build the scene once
         lastPanel = now;
       }
       const state = app.state();
+      const key = state + "|" + app.status(); // e.g. "Loading speech model" -> "Listening for Gemini"
       const animated = !reduceMotion && ["addressed", "generating", "speaking"].includes(state);
-      if (animated || state !== lastOrbState) orb.material.map.redraw();
-      lastOrbState = state;
+      if (animated || key !== lastOrbKey) orb.material.map.redraw();
+      lastOrbKey = key;
       arm?.update(now);
     });
 

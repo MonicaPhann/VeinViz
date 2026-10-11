@@ -36,6 +36,7 @@
   };
 
   function setState(next, note) {
+    if (!note && next === "armed" && listener.paused) note = "Mic paused · tap or pinch to start it";
     state = next;
     mic.dataset.state = next;
     mic.setAttribute("aria-pressed", String(micOn));
@@ -423,11 +424,16 @@
 
     return {
       get ready() { return ready; },
+      get paused() { return !!ctx && ctx.state !== "running"; },
+      resume() { if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {}); },
       async start() {
         stream = await navigator.mediaDevices.getUserMedia({
           audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         });
         ctx = new AudioContext();
+        // Browsers can start audio paused unless a tap started it (an AR pinch may not count).
+        if (ctx.state === "suspended") ctx.resume().catch(() => {});
+        ctx.onstatechange = () => { if (state === "armed") setState("armed"); else changed(); };
         const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
         await ctx.audioWorklet.addModule(url);
         const node = new AudioWorkletNode(ctx, "pcm16k");
@@ -514,11 +520,13 @@
     messages: () => [...items.values()].map((it) => it.data),
     region: () => region,
     toggleMic: () => toggleMic(),
+    resumeAudio: () => { listener.resume(); if (state === "armed") setState("armed"); },
     onChange: (fn) => watchers.add(fn),
   };
 
   // ---------------- wiring ----------------
   mic.addEventListener("click", toggleMic);
+  addEventListener("pointerdown", () => { if (micOn && listener.paused) { listener.resume(); setTimeout(() => setState(state), 300); } });
   chat.addEventListener("scroll", () => { if (nearBottom()) jump.hidden = true; }, { passive: true });
   jump.addEventListener("click", () => { chat.scrollTop = chat.scrollHeight; jump.hidden = true; });
 
