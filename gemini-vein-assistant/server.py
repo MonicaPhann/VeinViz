@@ -32,7 +32,9 @@ load_dotenv(BASE_DIR / ".env")
 
 API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest").strip()
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small.en").strip()
+# "auto" times the laptop at startup and picks the most accurate model that stays quick on it.
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "auto").strip() or "auto"
+WHISPER_THREADS = min(os.cpu_count() or 4, 8)
 CAMERA_URL = os.getenv("CAMERA_STREAM_URL", "http://192.168.1.143:8000/stream").strip()
 HISTORY_TURNS = int(os.getenv("HISTORY_TURNS", "20"))
 
@@ -123,12 +125,40 @@ whisper_ready = threading.Event()
 whisper_lock = threading.Lock()
 
 
+whisper_name = WHISPER_MODEL
+transcribe_secs = 0.5  # running average of how long a transcription takes on this computer
+
+# Most accurate first. A model is kept if a 3-second test clip transcribes within this many seconds.
+AUTO_MODELS = [("small.en", 1.0), ("base.en", 0.8), ("tiny.en", None)]
+
+
+def benchmark(model: WhisperModel) -> float:
+    clip = (np.random.default_rng(0).standard_normal(SAMPLE_RATE * 3) * 0.003).astype(np.float32)
+    best = float("inf")
+    for _ in range(2):  # the first run includes warm-up
+        t = time.time()
+        list(model.transcribe(clip, language="en", beam_size=1, vad_filter=False,
+                              without_timestamps=True, condition_on_previous_text=False)[0])
+        best = min(best, time.time() - t)
+    return best
+
+
 def load_whisper() -> None:
-    global whisper
+    global whisper, whisper_name, transcribe_secs
     t = time.time()
-    whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
+    if WHISPER_MODEL != "auto":
+        whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8", cpu_threads=WHISPER_THREADS)
+    else:
+        for name, limit in AUTO_MODELS:
+            model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=WHISPER_THREADS)
+            secs = benchmark(model)
+            print(f"[speech] {name}: test clip took {secs:.2f}s")
+            whisper, whisper_name, transcribe_secs = model, name, secs
+            if limit is None or secs <= limit:
+                break
+            print(f"[speech] {name} is too slow on this computer, trying a smaller model")
     whisper_ready.set()
-    print(f"[speech] Whisper {WHISPER_MODEL} ready in {time.time() - t:.1f}s")
+    print(f"[speech] Whisper {whisper_name} ready in {time.time() - t:.1f}s ({WHISPER_THREADS} threads)")
 
 
 def transcribe(pcm: bytes, partial: bool) -> str | None:
@@ -137,6 +167,8 @@ def transcribe(pcm: bytes, partial: bool) -> str | None:
         return None
     if not whisper_lock.acquire(blocking=not partial):
         return None
+    global transcribe_secs
+    started = time.time()
     try:
         audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
         segments, _ = whisper.transcribe(
@@ -148,7 +180,12 @@ def transcribe(pcm: bytes, partial: bool) -> str | None:
             condition_on_previous_text=False,
             without_timestamps=True,
         )
-        return " ".join(s.text.strip() for s in segments if s.no_speech_prob < 0.6).strip()
+        text = " ".join(s.text.strip() for s in segments if s.no_speech_prob < 0.6).strip()
+        took = time.time() - started
+        transcribe_secs = 0.7 * transcribe_secs + 0.3 * took
+        if not partial:
+            print(f"[speech] {len(pcm) / (SAMPLE_RATE * 2):.1f}s of speech -> text in {took:.2f}s")
+        return text
     finally:
         whisper_lock.release()
 
@@ -164,12 +201,21 @@ async def broadcast(event: dict) -> None:
         sockets.discard(ws)
 
 
-async def grab_frame(timeout: float = 3.0) -> bytes | None:
-    """Pull one complete JPEG out of the MJPEG stream, or None if unavailable."""
-    if not CAMERA_URL:
+camera_retry_at = 0.0  # after a failed grab, questions skip the camera until this time
+CAMERA_RETRY_SECS = 20
+
+
+async def grab_frame(timeout: float = 2.0) -> bytes | None:
+    """Pull one complete JPEG out of the MJPEG stream, or None if unavailable.
+
+    If the camera can't be reached, later questions skip it for CAMERA_RETRY_SECS instead of
+    each waiting for a timeout (on another network, the default camera address doesn't exist).
+    """
+    global camera_retry_at
+    if not CAMERA_URL or time.time() < camera_retry_at:
         return None
     try:
-        async with httpx.AsyncClient(timeout=timeout) as http:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=1.0)) as http:
             async with http.stream("GET", CAMERA_URL) as resp:
                 resp.raise_for_status()
                 buf = b""
@@ -186,7 +232,8 @@ async def grab_frame(timeout: float = 3.0) -> bytes | None:
                         if len(buf) > 8_000_000:
                             return None
     except Exception as exc:  # camera offline, timeout, bad stream
-        print(f"[camera] frame grab failed: {exc!r}")
+        print(f"[camera] can't reach {CAMERA_URL} ({exc.__class__.__name__}); answering without it for {CAMERA_RETRY_SECS}s")
+    camera_retry_at = time.time() + CAMERA_RETRY_SECS
     return None
 
 
@@ -254,7 +301,9 @@ async def answer(history: list[dict], question: str, origin: str) -> None:
         if client is None:
             raise RuntimeError("GEMINI_API_KEY is not set. Add it to the .env file and restart.")
 
+        started = time.time()
         frame = await grab_frame()
+        camera_secs = time.time() - started
         reply["camera"] = frame is not None
         await broadcast({"type": "meta", "id": reply["id"], "camera": reply["camera"]})
 
@@ -275,11 +324,16 @@ async def answer(history: list[dict], question: str, origin: str) -> None:
             contents=contents,
             config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, temperature=0.4),
         )
+        first_words = None
         async for chunk in stream:
             text = chunk.text or ""
+            if text and first_words is None:
+                first_words = time.time() - started
             if text:
                 reply["text"] += text
                 await broadcast({"type": "delta", "id": reply["id"], "text": text})
+        print(f"[timing] camera {camera_secs:.2f}s · first words {first_words or 0:.2f}s · "
+              f"full answer {time.time() - started:.2f}s ({MODEL})")
     except asyncio.CancelledError:
         reply["error"] = "Interrupted by a new question."
         raise
@@ -374,7 +428,8 @@ async def audio_ws(ws: WebSocket) -> None:
                 if not active:
                     continue
                 buf += chunk
-                if len(buf) - last_partial >= PARTIAL_EVERY_BYTES and (partial_task is None or partial_task.done()):
+                every = max(PARTIAL_EVERY_BYTES, int(2 * transcribe_secs * SAMPLE_RATE * 2))
+                if len(buf) - last_partial >= every and (partial_task is None or partial_task.done()):
                     last_partial = len(buf)
                     partial_task = asyncio.create_task(send_partial(utt_id, bytes(buf)))
                 continue
@@ -395,12 +450,25 @@ async def audio_ws(ws: WebSocket) -> None:
         ready_task.cancel()
 
 
+def network_ip() -> str | None:
+    """This computer's address on the local network (what other devices should open)."""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))  # picks the outgoing interface; nothing is sent
+            return sock.getsockname()[0]
+    except OSError:
+        return None
+
+
 if __name__ == "__main__":
     import uvicorn
 
     if not API_KEY:
         print("WARNING: GEMINI_API_KEY is not set in .env — answers will fail until it is.")
     port = int(os.getenv("PORT", "8080"))
-    print(f"Model: {MODEL}\nSpeech: local Whisper {WHISPER_MODEL}\nCamera: {CAMERA_URL or '(disabled)'}")
+    print(f"Model: {MODEL}\nSpeech: local Whisper ({WHISPER_MODEL})\nCamera: {CAMERA_URL or '(disabled)'}")
     print(f"Open http://localhost:{port} in your browser.")
+    if ip := network_ip():
+        print(f"Other devices on this network: http://{ip}:{port}  (view the chat; the mic works on this computer)")
     uvicorn.run(app, host="0.0.0.0", port=port)

@@ -76,12 +76,30 @@ Browsers only allow the mic on `localhost` or HTTPS, so those other screens are 
 |---|---|
 | `GEMINI_API_KEY` | (required) |
 | `GEMINI_MODEL` | `gemini-flash-lite-latest` (about 1.5s per answer; `gemini-flash-latest` took 80s+ on this key) |
-| `WHISPER_MODEL` | `small.en` (`base.en` is faster but less accurate) |
+| `WHISPER_MODEL` | `auto`: tests this computer at startup and picks `small.en`, `base.en` or `tiny.en` (most to least accurate) |
 | `CAMERA_STREAM_URL` | `http://192.168.1.143:8000/stream` |
 | `PORT` | `8080` |
 
 If your camera runs at a different address, change `CAMERA_STREAM_URL`.
 The chat lives in memory only. Restarting the server starts a fresh session.
+
+## If it's slow
+
+The server window prints where the time goes:
+
+```
+[speech] small.en: test clip took 0.64s                 <- speed test at startup
+[speech] 3.5s of speech -> text in 0.90s                <- speech recognition, on this computer
+[timing] camera 0.05s · first words 1.20s · full answer 1.90s
+```
+
+- **Speech recognition is slow** (more than about 2s): it runs on this computer's processor. Plug the laptop in and
+  set Windows power mode to **Best performance**. Keep `WHISPER_MODEL=auto`, or set `base.en` or `tiny.en`.
+- **The camera step is slow, or says it can't reach the camera:** set `CAMERA_STREAM_URL` to the camera's real
+  address on this network, or leave it empty if there's no camera. An unreachable camera only costs about a second,
+  then the assistant skips it for 20 seconds.
+- **Gemini's first words take more than 3 seconds:** check `GEMINI_MODEL` is `gemini-flash-lite-latest`, look for
+  `429` (quota) errors in the window, and try another network. School or work Wi-Fi and VPNs can slow API calls.
 
 ## Notes
 
