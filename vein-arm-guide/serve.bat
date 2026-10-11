@@ -5,6 +5,8 @@ setlocal
 cd /d "%~dp0"
 if "%PORT%"=="" set "PORT=8081"
 call :find_python || goto :fail
+echo Open http://localhost:%PORT% in your browser.
+%PY% -c "import socket; s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(('8.8.8.8', 80)); print('Other devices on this network and the Quest: http://' + s.getsockname()[0] + ':%PORT%')" 2>nul
 %PY% -m http.server %PORT% --bind 0.0.0.0
 exit /b
 
