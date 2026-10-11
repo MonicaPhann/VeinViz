@@ -34,6 +34,26 @@ Windows and look for the "IPv4 Address".
 
 To stop it, press Ctrl+C. The page shows "Waiting for Vein Assist…" until the assistant is running.
 
+## AR on the Meta Quest (passthrough)
+
+The arm floats in your real room as a glass hologram, with no browser window around it.
+
+1. Start Vein Assist on the computer (`run.sh` / `run.bat`). It serves this page too, over https.
+2. On the Quest, open the **"Arm only"** link that Vein Assist prints, e.g. `https://192.168.1.143:8443/arm/`.
+   (Or use the main link, `https://192.168.1.143:8443`: its AR view shows the chat, mic and arm together.)
+   The first time, the browser warns the connection isn't private: tap **Advanced → Proceed**.
+3. Tap **View in AR** (top left) and allow it.
+4. The arm appears about 65 cm in front of you, a little below eye level, labelled with the recommended region.
+   To move it, point at it and pinch (or pull the trigger), carry it, and let go. It turns to face you.
+5. Say "Gemini, recommended region" and the region lights up in the headset. Press the Meta button to leave AR.
+
+Tip: Vein Assist has its own AR view (its https link, then **View in AR**) that shows the chat, the mic and
+this arm together, since the Quest only runs one AR page at a time. The 3D code both use is in `ar-kit.js`.
+
+AR needs https, so the plain `http://…:8081` link shows a note on the Quest pointing to the https link.
+The 3D library (three.js) loads from the internet, which the assistant needs anyway.
+To check the AR scene on a computer without a headset, add `?ar-preview` to the address.
+
 ## Use
 
 Say **"Gemini, recommended region"**. You can add context, for example "Gemini, the median cubital

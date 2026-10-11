@@ -121,6 +121,30 @@
     :root[data-mode="dark"] .theme-btn .drop,
     :root[data-mode="aero"] .theme-btn .sun { display: block; }
 
+    /* "View in AR" (shown only where the headset supports it) */
+    .ar-btn {
+      position: fixed; top: 16px; left: 16px; height: 44px; padding: 0 16px 0 12px;
+      display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+      border-radius: 12px; border: 1px solid var(--btn-border); background: var(--bg); color: var(--text);
+      font: 600 15px var(--font); transition: border-color 160ms;
+    }
+    .ar-btn[hidden] { display: none; }
+    .ar-btn:hover { border-color: var(--muted); }
+    .ar-btn:focus-visible { outline: 3px solid var(--glow); outline-offset: 2px; }
+    .ar-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    :root[data-theme="aero"] .ar-btn {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.6) 50%, rgba(214, 240, 255, 0.75) 51%, rgba(255, 255, 255, 0.85) 100%);
+      box-shadow: 0 2px 8px rgba(14, 80, 130, 0.2);
+    }
+    .ar-hint { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); margin: 0; max-width: calc(100% - 32px);
+      padding: 8px 14px; border-radius: 10px; border: 1px solid var(--btn-border); background: var(--bg);
+      color: var(--muted); font-size: 14px; text-align: center; }
+    .ar-hint[hidden] { display: none; }
+    .ar-canvas { position: fixed; inset: 0; display: none; pointer-events: none; } /* never blocks taps on the page */
+    .ar-preview body { background: #1d232b; }
+    .ar-preview main, .ar-preview .theme-btn { display: none; }
+    .ar-preview .ar-canvas { display: block; }
+
     @media (prefers-reduced-motion: reduce) {
       .zone, .zone.on { transition: none; }
       .zone.on .ring { animation: none; }
@@ -133,6 +157,12 @@
     <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
     <svg class="drop" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
   </button>
+
+  <button class="ar-btn" id="ar-btn" type="button" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
+    View in AR
+  </button>
+  <p class="ar-hint" id="ar-hint" role="status" hidden></p>
 
   <main>
     <!-- Right arm, palm up (thumb side on the left of the picture). -->
@@ -228,8 +258,13 @@
       dorsal_hand: ["Dorsal hand veins", "Back of the hand"],
     };
     const caption = document.getElementById("caption");
+    const listeners = [];
+    let current = null;
+    // ar.js reads the current region and hears about changes through this.
+    window.veinArm = { sites: SITES, current: () => current, onChange: (fn) => listeners.push(fn) };
 
     function show(site) {
+      if (site !== current) { current = site; listeners.forEach((fn) => fn(site)); }
       document.querySelectorAll(".zone").forEach((z) => z.classList.toggle("on", z.dataset.site === site));
       if (site && SITES[site]) {
         caption.innerHTML = '<p class="eyebrow">Recommended region</p><p class="site" id="caption-text"></p><p class="where"></p>';
@@ -245,18 +280,18 @@
       caption.querySelector(".hint").textContent = text;
     }
 
-    // Listen to the Vein Assist chatbot server (same computer, port 8080 unless ?server=host:port).
+    // Listen to the Vein Assist server: the same address when it serves this page (/arm/),
+    // otherwise port 8080 on this computer (override with ?server=host:port).
     const params = new URLSearchParams(location.search);
-    const server = params.get("server") || `${location.hostname || "localhost"}:8080`;
-    let current = null;
+    const server = params.get("server")
+      || (location.pathname.startsWith("/arm") ? location.host : `${location.hostname || "localhost"}:8080`);
 
     function connect() {
       const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${server}/ws`);
       ws.onmessage = (e) => {
         const ev = JSON.parse(e.data);
         if (ev.type === "snapshot" || ev.type === "region") {
-          current = ev.region ? ev.region.site : null;
-          show(current);
+          show(ev.region ? ev.region.site : null);
         }
       };
       ws.onopen = () => show(current);
@@ -290,5 +325,6 @@
     syncTheme();
   })();
   </script>
+  <script type="module" src="ar.js"></script>
 </body>
 </html>
